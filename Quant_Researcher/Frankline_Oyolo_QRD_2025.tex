@@ -1,0 +1,200 @@
+ \documentclass[letterpaper,10.5pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage{fontawesome5}
+\usepackage{multicol}
+\setlength{\multicolsep}{-3.0pt}
+\setlength{\columnsep}{-1pt}
+\input{glyphtounicode}
+
+\usepackage{enumitem}
+\setlist[itemize]{label=-} % ADD THIS LINE
+\usepackage{fontawesome5}
+\usepackage{amssymb}
+\usepackage{newunicodechar}
+\newunicodechar{λ}{\ensuremath{\lambda}}
+\pagestyle{fancy}
+\fancyhf{} % clear all header and footer fields
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\pdfgentounicode=1
+% Adjust margins
+\addtolength{\oddsidemargin}{-0.6in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1.19in}
+\addtolength{\topmargin}{-.7in}
+\addtolength{\textheight}{1.4in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+% Sections formatting
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large\bfseries
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+% Ensure that generated pdf is machine-readable/ATS parsable
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+\usepackage{enumitem}
+\usepackage{fontawesome}
+\usepackage{amsmath}  % For mathematical symbols
+\usepackage{textcomp} % For additional symbols
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \textbf{\small #2} \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.0in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+\usepackage{enumitem}        % For item spacing control
+\usepackage{amsmath}         % For proper math formatting
+\newcommand{\cloudproviders}{AWS\hspace{0pt}/\hspace{0pt}GCP\hspace{0pt}/\hspace{0pt}Azure} % Cloud provider formatting
+
+%-------------------------------------------
+%%%%%%  RESUME STARTS HERE  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{document}
+
+%----------HEADING----------
+\begin{center}
+    {\Huge \scshape Frankline Misango Oyolo } \\ \vspace{1pt}
+    \small \raisebox{-0.1\height}\faPhone\ +85251042909 ~ 
+    \href{https://misango.me/}{\raisebox{-0.2\height}\faGlobe\  
+    \underline{misango.me}} ~ 
+    \href{mailto:franklinemisango4@gmail.com}{\raisebox{-0.2\height}\faEnvelope\  \underline{franklinemisango4@gmail.com}} ~ 
+    \href{https://github.com/FranklineMisango}{\raisebox{-0.2\height}\faGithub\ \underline{github.com/FraklineMisango}}
+    \href{https://linkedin.com/in/misango}{\raisebox{-0.2\height}\faLinkedin\ \underline{linkedin.com/in/misango}} ~
+
+    \vspace{-10pt}
+\end{center}
+
+%-----------EDUCATION-----------
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {The University of Hong Kong}{Aug 2022 -- Jun 2027}
+      {Bachelor of Engineering in Data Science and Engineering| GPA: 3.70/4.3}{Hong Kong SAR}
+      \resumeItemListStart
+        \resumeItem{\textbf{Relevant courses}: Data Structures \& Algorithms, Machine Learning, Stochastic Calculus, Probability \& Statistics}
+        \vspace{-2.5pt}
+      \resumeItemListEnd
+  \resumeSubHeadingListEnd
+\vspace{-11pt}
+
+
+% ===================== PROFESSIONAL EXPERIENCE =====================
+\section{Professional Experience}
+\vspace{-2pt}
+\resumeSubHeadingListStart
+\resumeSubheading
+{The Swiss Federal Institute of Technology}{Jul 2025 -- August 2025}
+{PhD Research Assistant}{Switzerland}
+\resumeItemListStart
+\vspace{-1pt}
+\resumeItem{Developed graph-augmented multi-factor panel model using DCRNN framework on 50+ TB Swiss transaction data, achieving out-of-sample R²=0.32 and MAPE=6.4\% for expenditure flows within cities through residual graph networks}
+\resumeItem{Designed regime-switching detection system combining HMM state classification with GARCH volatility overlays, demonstrating 21-day median lead time vs macroeconomic releases. Integrated factor optimizer reducing active risk by 60 basis points}
+\resumeItem{Analyzed 1 petabyte historical panel to develop canton-level discretionary demand factor using graph neural network message passing, improving allocation model IR by +0.28 through spatial dependency modeling}
+\resumeItemListEnd
+\vspace{1pt}
+\resumeSubheading
+  {BASF SE}{Jan 2025 -- Jun 2025}
+  {Machine Learning Researcher}{Hong Kong SAR}
+  \resumeItemListStart
+      \vspace{-2pt}
+    \resumeItem{Modeled trade policy shocks using panel difference-in-differences with local projection estimators, generating 50k Monte Carlo paths that reduced DSO volatility by 42\% and improved cash flow forecast RMSE by 18\%}
+    \resumeItem{Optimized global supplier networks through CVaR-constrained Monte Carlo simulation, achieving 25bps landed cost variance while releasing \$2.3M working capital via tariff pass-through minimization}
+    \resumeItem{Developed 300+ SHAP-interpretable automated valuation models (R²=0.92) decomposing enterprise value drivers (volume, ASP, FX, WACC), guiding semiconductor sales strategy with projected 14\% EBIT uplift}
+\resumeItemListEnd
+\vspace{-1pt}
+    \resumeSubheading
+    {Manulife Financial Corporation}{Jun 2024 -- Aug 2024}
+    {Data Governance Summer Analyst}{Hong Kong SAR}
+    \resumeItemListStart
+    \resumeItem{Built metadata enrichment engine processing 2.3M+ Azure Purview assets (F1-score=87.2\%), increasing tag coverage from 4\% to 65\% and actuarial model feature completeness by 18 percentage points}
+    \resumeItem{Implemented column-level lineage tracking using Snowflake and GitOps, mapping premium/claims data to IFRS 17 calculation layers and reducing model onboarding time by 40\%}
+    \resumeItem{Automated 300+ data quality checks with Great Expectations framework, reducing critical error rate by 62\% while improving new business margin screening precision to 92\%}
+    \resumeItemListEnd
+    \vspace{-3pt}
+\vspace{-3pt}
+
+\resumeSubHeadingListEnd
+\vspace{-7pt}
+
+%-----------SOFTWARE PROJECTS,PUBLICATIONS & OPEN SOURCE CONTRIBUTIONS-----------
+\newcommand{\resumeProjectHeading}[2]{
+  \vspace{1pt}\item
+    \begin{tabular*}{1.0\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & \textbf{\small #2} \\
+    \end{tabular*}\vspace{-5pt}
+}
+
+\section{Quantitative Research and Development}
+    \vspace{-4pt}
+    \resumeSubHeadingListStart      
+        \resumeProjectHeading
+            {\textbf{Cross-Regime Analysis of Leveraged Portfolio Strategies} \href{https://drive.google.com/...}{\faExternalLink}}
+            {HKU Trading Group Published}
+            \resumeItemListStart
+                \vspace{-3pt}
+                \resumeItem{Formalized regime-switching portfolio optimization via HJB equations and risk parity constraints(alpha = 0.92), achieving 46.2\% annual returns (2017-2021) with 22\% lower volatility than SPY, identifying 3 distinct regimes through Markov switching analysis}
+                \resumeItem{Modelled volatility decay mitigation framework using GARCH(1,1)-optimized ERC weights ( Adjusted Sigma = 1.2), reducing leveraged ETF decay by 38\% compared to naive 3x allocation in backtests}
+                \resumeItem{Optimized correlations across 12 different financial instruments using dynamic correlation adjustments over time, reducing the maximum potential loss by 18.2\%, achieving a Sharpe ratio of 0.82 in stress tests, and improving the stability and performance of the portfolio in volatile market conditions.}
+            \resumeItemListEnd
+        \resumeProjectHeading
+            {\textbf{Market Making Through Jump Diffusion HJB Equations with Order Flow Toxicity Tracking} \href{https://drive.google.com/file/d/1NdxAQ8-mxF9xElHzn4qWa0sMOXHaSguS/view?usp=sharing}{\faExternalLink}}
+            {Peer Review}
+            \resumeItemListStart
+                \resumeItem{Enhanced HJB equations with jump diffusion modeling (lambda = 3.2 jumps/day) achieving 1.48 Sharpe ratio in BTC/USD backtests, reducing inventory risk by 62\% vs traditional quoting strategies}
+                \resumeItem{Implemented finite difference methods on 201x201 grid with 0.89ms latency using CUDA-optimized kernels (136x speedup vs CPU), maintaining 97.4\% theoretical PnL efficiency after transaction costs}
+                \resumeItem{Developed flow toxicity tracking system reducing adverse selection by 41\% through real-time order imbalance detection (Squared R = 0.79) vs actual toxic flow events)}
+            \resumeItemListEnd
+        \resumeProjectHeading
+            {\textbf{FeenQR} | Quant Research Platform \href{https://github.com/arithmax-research/FeenQR}{\faGithub}}
+            {C\#| 2025-Present}
+        \resumeItemListStart
+            \vspace{-3pt}
+            \resumeItem{Designed and launched a real-time quantitative research platform with seamless Bloomberg B-Pipe integration, achieving \textbf{92\% strategy accuracy} and a Sharpe ratio of 3.8 in simulated trading}
+            \resumeItem{Constructed a distributed backtesting engine capable of processing \textbf{2.4TB of market data per hour} on an 8-GPU A100 cluster, enabling rapid exploration and validation of trading strategies}
+            \resumeItem{Integrated large language models to power an AI-driven alpha generation module, delivering \textbf{17\% CAGR} in simulated trading performance}
+        \resumeItemListEnd
+        \resumeProjectHeading
+        {\textbf{AlgoForge Backtester} | Algorithmic Trading Backtesting Ecosystem 
+        \href{https://github.com/arithmax-research/LeanBacktester}{\faGithub}}
+        {Python/C\# | 2024-2025}
+    \resumeItemListStart
+            \vspace{-3pt}
+            \resumeItem{Architected AI-powered strategy generator (RAGENTIC) converting natural language to production-grade C\# algorithms with \textbf{94\% compilation success rate} on first attempt}
+            \resumeItem{Built distributed data pipeline processing \textbf{1.8TB/day} across 12+ sources (Alpaca/Binance/Polygon) with automated LEAN format conversion and quality checks}
+            \resumeItem{Implemented QuantConnect integration enabling backtesting of AI-generated strategies with \textbf{3.2x speed improvement} over vanilla LEAN CLI through optimized slippage modeling}
+            \resumeItem{Developed ML-powered data quality analyzer achieving \textbf{99.7\% integrity validation} across 15+ market data formats (Tick/CSV/Parquet/HDF5)}
+    \resumeItemListEnd
+
+\end{document}
