@@ -14,7 +14,11 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    await init_db()
+    try:
+        await init_db()
+    except Exception as e:
+        print(f"Warning: Could not initialize database: {e}")
+        print("Running in database-unavailable mode")
 
 app.include_router(jobs.router)
 app.include_router(cv.router)
