@@ -1,23 +1,76 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Upload, Briefcase, TrendingUp, CheckCircle2, FileText } from "lucide-react";
+import { Upload, Briefcase, TrendingUp, CheckCircle2, FileText, Sparkles } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
+import { makeCvProfile } from "@/lib/cv-profile";
+import { useCvProfile } from "@/components/CvProvider";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_FALLBACK = API.includes("localhost")
+  ? API.replace("localhost", "127.0.0.1")
+  : API.includes("127.0.0.1")
+    ? API.replace("127.0.0.1", "localhost")
+    : null;
+
+const formatUploadError = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((entry) => {
+          if (typeof entry === "string") {
+            return entry;
+          }
+
+          if (entry && typeof entry === "object" && "msg" in entry && typeof entry.msg === "string") {
+            return entry.msg;
+          }
+
+          return null;
+        })
+        .filter((message): message is string => Boolean(message));
+
+      if (messages.length > 0) {
+        return messages.join(" ");
+      }
+    }
+
+    if (error.response) {
+      return `Upload failed with status ${error.response.status}.`;
+    }
+
+    return `Upload could not reach API at ${API}${API_FALLBACK ? ` (also tried ${API_FALLBACK})` : ""}.`;
+  }
+
+  if (error instanceof Error && error.message === "API_UNREACHABLE") {
+    return `Upload could not reach API at ${API}${API_FALLBACK ? ` (also tried ${API_FALLBACK})` : ""}.`;
+  }
+
+  return "Upload failed. Please try again.";
+};
 
 export default function Home() {
+  const { profile, hydrated, setProfile } = useCvProfile();
   const [stats, setStats] = useState({ totalJobs: 0, appliedJobs: 0, interviews: 0, offers: 0 });
   const [recentJobs, setRecentJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cvUploaded, setCvUploaded] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  useEffect(() => {
+    setCvUploaded(Boolean(profile));
+  }, [profile]);
 
   const fetchStats = async () => {
     try {
@@ -49,7 +102,6 @@ export default function Home() {
       return;
     }
     
-    setFile(selectedFile);
     setUploading(true);
     setUploadError("");
     
@@ -57,20 +109,49 @@ export default function Home() {
     formData.append("file", selectedFile);
     
     try {
-      const response = await axios.post(`${API}/cv/upload`, formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      const candidates = [API, API_FALLBACK].filter((u): u is string => Boolean(u));
+      let response: any = null;
+      let networkFailure = false;
+
+      for (const base of candidates) {
+        try {
+          response = await axios.post(`${base}/cv/upload`, formData);
+          break;
+        } catch (err: unknown) {
+          if (axios.isAxiosError(err) && !err.response) {
+            networkFailure = true;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!response) {
+        if (networkFailure) {
+          throw new Error("API_UNREACHABLE");
+        }
+        throw new Error("UPLOAD_FAILED");
+      }
+
+      const savedProfile = makeCvProfile({
+        filename: selectedFile.name,
+        text: response.data.text,
+        textPreview: response.data.text_preview,
+        textLength: response.data.text_length,
+        pageCount: response.data.page_count,
       });
+
+      setProfile(savedProfile);
+
       setCvUploaded(true);
       setUploadError("");
       setUploadResult(response.data ?? null);
       // Reset form after success
       e.currentTarget.value = "";
       setTimeout(() => setUploading(false), 1000);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Upload failed:", error);
-      setUploadError(error.response?.data?.detail || "Upload failed. Please try again.");
+      setUploadError(formatUploadError(error));
       setCvUploaded(false);
       setUploadResult(null);
       setUploading(false);
@@ -84,6 +165,27 @@ export default function Home() {
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Welcome to CVMatcher</h1>
         <p className="text-slate-400">Upload your CV and discover personalized job opportunities with AI-powered matching</p>
       </div>
+
+      {hydrated && profile && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">CV Loaded</p>
+            <p className="text-lg font-semibold text-slate-100 mt-1 truncate">{profile.filename}</p>
+          </div>
+          <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Key Skills</p>
+            <p className="text-lg font-semibold text-brand-400 mt-1">{profile.insights.keySkills.length}</p>
+          </div>
+          <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Highlights</p>
+            <p className="text-lg font-semibold text-slate-100 mt-1">{profile.insights.experienceHighlights.length}</p>
+          </div>
+          <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Publications</p>
+            <p className="text-lg font-semibold text-slate-100 mt-1">{profile.insights.publications.length}</p>
+          </div>
+        </div>
+      )}
 
       {/* CV Upload Section */}
       <div className="bg-gradient-to-br from-brand-500/10 to-brand-500/5 border border-brand-500/20 rounded-xl p-8 backdrop-blur">
@@ -128,6 +230,51 @@ export default function Home() {
             )}
           </div>
         </label>
+        {profile && (
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+              <div className="flex items-center gap-2 text-brand-400 mb-2">
+                <Sparkles size={16} />
+                <p className="text-sm font-semibold">Key Skills</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {profile.insights.keySkills.length > 0 ? profile.insights.keySkills.map((skill) => (
+                  <span key={skill} className="rounded-full bg-brand-500/15 px-3 py-1 text-xs text-brand-200">
+                    {skill}
+                  </span>
+                )) : (
+                  <p className="text-sm text-slate-400">No clear skills detected yet.</p>
+                )}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+              <div className="flex items-center gap-2 text-brand-400 mb-2">
+                <FileText size={16} />
+                <p className="text-sm font-semibold">Experience Highlights</p>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-300">
+                {profile.insights.experienceHighlights.length > 0 ? profile.insights.experienceHighlights.slice(0, 4).map((line, index) => (
+                  <li key={`${line}-${index}`} className="line-clamp-2">{line}</li>
+                )) : (
+                  <li className="text-slate-400">No obvious highlight lines found yet.</li>
+                )}
+              </ul>
+            </div>
+            <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+              <div className="flex items-center gap-2 text-brand-400 mb-2">
+                <CheckCircle2 size={16} />
+                <p className="text-sm font-semibold">Publications</p>
+              </div>
+              <ul className="space-y-2 text-sm text-slate-300">
+                {profile.insights.publications.length > 0 ? profile.insights.publications.slice(0, 4).map((line, index) => (
+                  <li key={`${line}-${index}`} className="line-clamp-2">{line}</li>
+                )) : (
+                  <li className="text-slate-400">No publication lines detected yet.</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
         {uploadResult && (
           <div className="mt-6 rounded-lg border border-slate-700 bg-slate-900/40 p-4">
             <p className="text-sm font-semibold text-slate-100 mb-3">Extracted CV text</p>

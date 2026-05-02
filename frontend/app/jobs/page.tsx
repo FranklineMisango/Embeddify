@@ -102,8 +102,8 @@ export default function JobsPage() {
                   Found <span className="font-bold">{result.scraped}</span> jobs — <span className="font-bold">{result.new}</span> new jobs saved to database.
                 </p>
               </div>
-              <a href="/tracker" className="inline-flex items-center text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors">
-                View in Tracker →
+              <a href="/match" className="inline-flex items-center text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors">
+                View Matches →
               </a>
             </div>
           </div>

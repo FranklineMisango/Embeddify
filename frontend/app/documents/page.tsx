@@ -1,186 +1,199 @@
 "use client";
 
-import { useState } from "react";
-import { Download, FileText, Sparkles, Trash2 } from "lucide-react";
-import axios from "axios";
+import { useMemo, useState } from "react";
+import { FileText, Sparkles } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const VARIANTS = ["data_science", "quant", "bi_sc", "research", "full"];
+const VARIANT_OPTIONS = [
+  {
+    id: "data_science",
+    label: "Data Science",
+    summary: "Strong analytics, experiments, and model-building focus.",
+    skills: ["Python", "SQL", "Machine Learning", "Experiment Design", "Dashboards"],
+    bullets: [
+      "Built end-to-end analytics workflows for product teams.",
+      "Designed experiments and reported findings to stakeholders.",
+      "Partnered with engineering to ship data products faster.",
+    ],
+  },
+  {
+    id: "quant",
+    label: "Quant Research",
+    summary: "Quantitative modeling, research rigor, and risk-aware thinking.",
+    skills: ["Statistics", "Time Series", "Python", "Optimization", "Research"],
+    bullets: [
+      "Developed statistical models to evaluate trading signals.",
+      "Documented methodology and backtesting assumptions clearly.",
+      "Worked with research teams to refine candidate features.",
+    ],
+  },
+  {
+    id: "bi_sc",
+    label: "BI / Supply Chain",
+    summary: "Operations visibility, reporting, and planning improvements.",
+    skills: ["Power BI", "Excel", "SQL", "Forecasting", "Process Improvement"],
+    bullets: [
+      "Created reporting views that improved decision speed.",
+      "Analyzed operational bottlenecks and suggested process fixes.",
+      "Collaborated with business teams on planning and inventory.",
+    ],
+  },
+  {
+    id: "research",
+    label: "Research",
+    summary: "Publication-ready work, literature review, and experimental clarity.",
+    skills: ["Research", "Writing", "Python", "Analysis", "Presentation"],
+    bullets: [
+      "Synthesized literature and framed open research questions.",
+      "Prepared experiment summaries for review and publication.",
+      "Presented findings with concise visual explanations.",
+    ],
+  },
+  {
+    id: "full",
+    label: "Full CV",
+    summary: "Broad profile with strong academic and professional depth.",
+    skills: ["Leadership", "Python", "SQL", "Research", "Delivery"],
+    bullets: [
+      "Balanced technical execution with stakeholder communication.",
+      "Shipped work across analysis, tooling, and reporting.",
+      "Kept the resume broad while keeping relevance explicit.",
+    ],
+  },
+] as const;
 
-type GeneratedDoc = {
-  id: number;
-  variant: string;
-  title: string;
-  date: string;
-  content: string;
-};
+type VariantId = (typeof VARIANT_OPTIONS)[number]["id"];
 
-type CustomizeResponse = {
-  latex: string;
-  match?: {
-    overall: number;
-  };
-};
+const getVariant = (variantId: string) => VARIANT_OPTIONS.find((variant) => variant.id === variantId) ?? VARIANT_OPTIONS[0];
 
 export default function DocumentsPage() {
-  const [jd, setJd] = useState("");
-  const [variant, setVariant] = useState("data_science");
-  const [result, setResult] = useState<CustomizeResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [documents, setDocuments] = useState<GeneratedDoc[]>([]);
+  const [variant, setVariant] = useState<VariantId>("data_science");
+  const [customName, setCustomName] = useState("My Target Variant");
+  const [targetRole, setTargetRole] = useState("Senior Data Scientist");
+  const [focus, setFocus] = useState("Python, ML, SQL, and stakeholder impact");
 
-  const customize = async () => {
-    setLoading(true);
-    try {
-      const r = await axios.post<CustomizeResponse>(`${API}/cv/customize`, {
-        variant,
-        job_description: jd,
-      });
-      setResult(r.data);
+  const preview = useMemo(() => {
+    const selected = getVariant(variant);
 
-      const newDoc: GeneratedDoc = {
-        id: Date.now(),
-        variant,
-        title: `Customized CV - ${variant}`,
-        date: new Date().toLocaleDateString(),
-        content: r.data.latex,
-      };
-      setDocuments((prev) => [newDoc, ...prev]);
-    } catch (error) {
-      console.error(error);
-    }
-    setLoading(false);
-  };
-
-  const download = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-  };
-
-  const deleteDoc = (id: number) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-  };
+    return {
+      title: customName.trim() || selected.label,
+      role: targetRole.trim() || selected.label,
+      focus: focus.trim() || selected.summary,
+      summary: selected.summary,
+      skills: selected.skills,
+      bullets: selected.bullets,
+    };
+  }, [customName, targetRole, focus, variant]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Documents</h1>
-        <p className="text-slate-400">Create and manage customized CV versions</p>
+        <p className="text-slate-400">Define a variant and preview a sample CV. No auto-generated LaTeX yet.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 bg-slate-800/30 border border-slate-700 rounded-lg p-8 space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-6 rounded-xl border border-slate-700 bg-slate-800/30 p-6">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">CV Variant</label>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Variant</label>
             <select
               value={variant}
-              onChange={(e) => setVariant(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
+              onChange={(event) => setVariant(event.target.value as VariantId)}
+              className="w-full rounded-lg border border-slate-600 bg-slate-900/50 px-4 py-3 text-slate-100 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
-              {VARIANTS.map((v) => (
-                <option key={v} value={v}>
-                  {v.replace(/_/g, " ").toUpperCase()}
+              {VARIANT_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Job Description</label>
-            <textarea
-              placeholder="Paste a job description to customize your CV for this position..."
-              value={jd}
-              onChange={(e) => setJd(e.target.value)}
-              className="w-full h-40 bg-slate-900/50 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors resize-none"
+            <label className="mb-2 block text-sm font-medium text-slate-300">Variant Name</label>
+            <input
+              value={customName}
+              onChange={(event) => setCustomName(event.target.value)}
+              className="w-full rounded-lg border border-slate-600 bg-slate-900/50 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              placeholder="My Target Variant"
             />
           </div>
 
-          <button
-            onClick={customize}
-            disabled={loading || !jd}
-            className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 font-semibold transition-all duration-200 flex items-center justify-center gap-2"
-          >
-            <Sparkles size={18} />
-            {loading ? "Customizing..." : "Customize CV"}
-          </button>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Target Role</label>
+            <input
+              value={targetRole}
+              onChange={(event) => setTargetRole(event.target.value)}
+              className="w-full rounded-lg border border-slate-600 bg-slate-900/50 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              placeholder="Senior Data Scientist"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Focus Notes</label>
+            <textarea
+              value={focus}
+              onChange={(event) => setFocus(event.target.value)}
+              className="h-32 w-full resize-none rounded-lg border border-slate-600 bg-slate-900/50 px-4 py-3 text-slate-100 placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              placeholder="What should this sample CV emphasize?"
+            />
+          </div>
+
+          <div className="rounded-lg border border-brand-500/20 bg-brand-500/10 p-4 text-sm text-slate-200">
+            <p className="font-semibold text-brand-300">{getVariant(variant).label}</p>
+            <p className="mt-1 text-slate-300">{getVariant(variant).summary}</p>
+          </div>
         </div>
 
-        <div className="lg:col-span-2 space-y-6">
-          {result && (
-            <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-100">Customized LaTeX</h3>
-                <button
-                  onClick={() => download(result.latex, `CV_${variant}_tailored.tex`)}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors"
-                >
-                  <Download size={16} />
-                  Download .tex
-                </button>
+        <div className="space-y-6 rounded-xl border border-slate-700 bg-slate-800/30 p-6">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-brand-500/15 p-3 text-brand-300">
+              <FileText size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">Sample CV Preview</h2>
+              <p className="text-sm text-slate-400">{preview.role} • {preview.title}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-6">
+            <div className="space-y-4 border-b border-slate-700 pb-4">
+              <div>
+                <p className="text-2xl font-bold text-slate-100">{preview.title}</p>
+                <p className="text-sm text-slate-400">{preview.role}</p>
               </div>
-              <div className="bg-slate-900/50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap break-words">
-                  {result.latex.substring(0, 500)}...
-                </pre>
-              </div>
-              {result.match && (
-                <div className="mt-4 p-3 bg-brand-500/10 border border-brand-500/20 rounded-lg">
-                  <p className="text-sm text-slate-300">
-                    Match Score:{" "}
-                    <span className="font-bold text-brand-400">
-                      {Math.round(result.match.overall * 100)}%
+              <p className="text-sm leading-6 text-slate-300">{preview.focus}</p>
+            </div>
+
+            <div className="mt-5 space-y-5">
+              <section>
+                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Profile Summary</p>
+                <p className="text-sm leading-6 text-slate-300">{preview.summary}</p>
+              </section>
+
+              <section>
+                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Core Skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {preview.skills.map((skill) => (
+                    <span key={skill} className="rounded-full bg-brand-500/15 px-3 py-1 text-xs text-brand-200">
+                      {skill}
                     </span>
-                  </p>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
+              </section>
 
-          {documents.length > 0 && (
-            <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8">
-              <h3 className="text-lg font-semibold text-slate-100 mb-4">Saved Documents</h3>
-              <div className="space-y-3">
-                {documents.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg hover:bg-slate-800 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="text-brand-400 flex-shrink-0" size={20} />
-                      <div>
-                        <p className="font-medium text-slate-100">{doc.title}</p>
-                        <p className="text-xs text-slate-400">{doc.date}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => download(doc.content, `CV_${doc.variant}.tex`)}
-                        className="p-2 text-slate-400 hover:text-brand-400 transition-colors"
-                      >
-                        <Download size={18} />
-                      </button>
-                      <button
-                        onClick={() => deleteDoc(doc.id)}
-                        className="p-2 text-slate-400 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <section>
+                <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Selected Experience Bullets</p>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  {preview.bullets.map((bullet, index) => (
+                    <li key={`${bullet}-${index}`} className="flex gap-2">
+                      <Sparkles className="mt-0.5 shrink-0 text-brand-400" size={14} />
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             </div>
-          )}
-
-          {!result && documents.length === 0 && (
-            <div className="bg-slate-800/30 border border-dashed border-slate-600 rounded-lg p-8 text-center">
-              <FileText className="mx-auto text-slate-600 mb-3" size={32} />
-              <p className="text-slate-400">No documents yet. Create your first customized CV!</p>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

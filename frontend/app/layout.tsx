@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
+import CvProvider from "@/components/CvProvider";
 
 export const metadata: Metadata = {
   title: "CVMatcher - AI Job Matching",
@@ -10,11 +11,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex min-h-screen antialiased">
-        <Sidebar />
-        <main className="flex-1 ml-64 min-h-screen">
-          <div className="p-8 max-w-7xl">{children}</div>
-        </main>
+      <body className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 min-h-screen antialiased">
+        <CvProvider>
+          <Sidebar />
+          <main className="min-h-screen">
+            <div className="mx-auto max-w-7xl px-6 py-8">{children}</div>
+          </main>
+        </CvProvider>
       </body>
     </html>
   );
