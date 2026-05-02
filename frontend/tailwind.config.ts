@@ -5,15 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: { 50: "#f0f9ff", 500: "#0ea5e9", 900: "#0c4a6e" },
-        // AlphaFold confidence palette
-        conf: {
-          vhigh: "#0053d6",  // Very High - blue
-          high: "#65cbf3",   // High - cyan
-          medium: "#ffdb13", // Medium - yellow
-          low: "#ff7d45",    // Low - orange
-          vlow: "#ff0000",   // Very Low - red
+        brand: {
+          50: "#f0f9ff",
+          400: "#22d3ee",
+          500: "#0ea5e9",
+          600: "#0284c7",
+          700: "#0369a1",
+          900: "#0c4a6e",
         },
+        slate: {
+          50: "#f8fafc",
+          100: "#f1f5f9",
+          200: "#e2e8f0",
+          300: "#cbd5e1",
+          400: "#94a3b8",
+          500: "#64748b",
+          600: "#475569",
+          700: "#334155",
+          800: "#1e293b",
+          900: "#0f172a",
+          950: "#020617",
+        },
+      },
+      fontFamily: {
+        sans: ["Georgia", "serif"],
       },
     },
   },
