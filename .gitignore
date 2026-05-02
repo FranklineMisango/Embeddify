@@ -10,3 +10,7 @@
 **.vrb
 **.xdv
 **/node_modules/
+/Generated_Latex_Files/
+**.next**
+**/__pycache__/**
+backend/uploads/
