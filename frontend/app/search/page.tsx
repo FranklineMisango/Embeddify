@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Search, MapPin, Briefcase, ExternalLink, Loader, Sparkles, CheckCircle2, AlertCircle, Zap } from "lucide-react";
+import { Search, MapPin, ExternalLink, Loader, Sparkles, CheckCircle2, AlertCircle, Zap } from "lucide-react";
 import axios from "axios";
 import { useCvProfile } from "@/components/CvProvider";
 
@@ -46,10 +46,11 @@ export default function JobSearchPage() {
     setAnalysis(null);
 
     try {
-      const response = await axios.post(`${API}/job-search/search`, {
+      const response = await axios.post(`${API}/job-search/search-and-rank`, {
         skills: profile.insights.keySkills,
         location,
         level,
+        job_title: profile.filename,
       });
 
       setJobs(response.data.jobs || []);
@@ -69,7 +70,6 @@ export default function JobSearchPage() {
     setAnalysis(null);
 
     try {
-      // First, try to fetch full job description
       let jobDescription = job.snippet;
       try {
         const descResponse = await axios.post(`${API}/job-search/fetch-job-description`, {
@@ -79,10 +79,9 @@ export default function JobSearchPage() {
           jobDescription = descResponse.data.description;
         }
       } catch (descErr) {
-        console.warn("Could not fetch full description, using snippet:", descErr);
+        console.warn("Could not fetch full description:", descErr);
       }
 
-      // Then analyze the job
       const response = await axios.post(`${API}/job-search/analyze-jd`, {
         cv_text: profile.text,
         job_description: jobDescription,
@@ -128,23 +127,22 @@ export default function JobSearchPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-slate-100 mb-2">Job Search</h1>
-        <p className="text-slate-400">Find opportunities tailored to your skills and experience</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-slate-100 mb-2">Job Search</h1>
+          <p className="text-slate-400">Find opportunities tailored to your skills and experience</p>
+        </div>
       </div>
 
-      {/* Search Panel */}
       <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-6 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Location Input */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
             <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-600 rounded-lg px-4 py-3">
               <MapPin size={18} className="text-slate-400" />
               <input
                 type="text"
-                placeholder="e.g., San Francisco, Remote, New York"
+                placeholder="e.g., Hong Kong, Singapore"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 className="flex-1 bg-transparent text-slate-100 placeholder-slate-500 focus:outline-none"
@@ -152,7 +150,6 @@ export default function JobSearchPage() {
             </div>
           </div>
 
-          {/* Level Select */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Experience Level</label>
             <select
@@ -168,7 +165,6 @@ export default function JobSearchPage() {
             </select>
           </div>
 
-          {/* Search Button */}
           <div className="flex items-end">
             <button
               onClick={handleSearch}
@@ -182,10 +178,8 @@ export default function JobSearchPage() {
         </div>
       </div>
 
-      {/* Results Section */}
       {searched && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Jobs List */}
           <div className="lg:col-span-1">
             <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-6">
               <h2 className="text-lg font-semibold text-slate-100 mb-4">
@@ -208,8 +202,21 @@ export default function JobSearchPage() {
                           : "bg-slate-900/40 border-slate-700 hover:border-brand-500/50"
                       }`}
                     >
-                      <p className="font-medium text-slate-100 line-clamp-2">{job.title}</p>
-                      <p className="text-xs text-slate-400 mt-1">{job.company}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="font-medium text-slate-100 line-clamp-2">{job.title}</p>
+                          <p className="text-xs text-slate-400 mt-1">{job.company}</p>
+                        </div>
+                        {job.ai_match_score && (
+                          <div className="flex-shrink-0 text-right">
+                            <p className="text-sm font-bold text-brand-400">{job.ai_match_score}%</p>
+                            <p className="text-xs text-slate-500">AI Match</p>
+                          </div>
+                        )}
+                      </div>
+                      {job.ai_reason && (
+                        <p className="text-xs text-slate-400 mt-2 line-clamp-2">{job.ai_reason}</p>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -219,11 +226,9 @@ export default function JobSearchPage() {
             </div>
           </div>
 
-          {/* Analysis Panel */}
           <div className="lg:col-span-2">
             {selectedJob ? (
               <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-6 space-y-4">
-                {/* Job Header */}
                 <div className="border-b border-slate-700 pb-4">
                   <h3 className="text-xl font-semibold text-slate-100">{selectedJob.title}</h3>
                   <p className="text-slate-400 mt-1">{selectedJob.company}</p>
@@ -246,7 +251,6 @@ export default function JobSearchPage() {
                   </div>
                 </div>
 
-                {/* Job Description Preview */}
                 {showDescription && (
                   <div className="bg-slate-900/40 rounded-lg p-4 border border-slate-700">
                     <p className="text-xs font-medium text-slate-400 mb-2">JOB DESCRIPTION</p>
@@ -256,7 +260,6 @@ export default function JobSearchPage() {
                   </div>
                 )}
 
-                {/* Analysis Loading */}
                 {analyzing ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="text-center">
@@ -266,7 +269,6 @@ export default function JobSearchPage() {
                   </div>
                 ) : analysis ? (
                   <div className="space-y-6">
-                    {/* Overall Match */}
                     <div className="bg-gradient-to-br from-brand-500/10 to-brand-500/5 border border-brand-500/20 rounded-lg p-6">
                       <div className="flex items-center justify-between mb-4">
                         <h2 className="text-2xl font-bold text-slate-100">Overall Match</h2>
@@ -289,54 +291,11 @@ export default function JobSearchPage() {
                       )}
                     </div>
 
-                    {/* Match Score Breakdown */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(analysis.matchScore).map(([key, score]: [string, any]) => (
-                        <div key={key} className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
-                          <p className="text-xs text-slate-400 uppercase mb-2">{key}</p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-2xl font-bold text-slate-100">{score}%</span>
-                            <div className="w-12 h-12 rounded-full border-2 border-slate-700 flex items-center justify-center">
-                              <div
-                                className="w-10 h-10 rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
-                                style={{
-                                  background: `conic-gradient(from 0deg, rgb(var(--color-brand-500)) 0deg ${score * 3.6}deg, rgb(var(--color-slate-700)) ${score * 3.6}deg)`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Section Analysis */}
-                    {analysis.sectionAnalysis && (
-                      <div className="space-y-3">
-                        <h3 className="text-lg font-semibold text-slate-100">Section Analysis</h3>
-                        {Object.entries(analysis.sectionAnalysis).map(([section, data]: [string, any]) => (
-                          <div key={section} className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="font-medium text-slate-100 capitalize">{section}</p>
-                              <span className="text-sm font-semibold text-brand-400">{data.match}%</span>
-                            </div>
-                            <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
-                              <div
-                                className="h-full bg-gradient-to-r from-brand-500 to-brand-400"
-                                style={{ width: `${data.match}%` }}
-                              />
-                            </div>
-                            <p className="text-sm text-slate-300">{data.details}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Matched Skills */}
                     {analysis.matchedSkills?.length > 0 && (
                       <div>
                         <h3 className="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
                           <CheckCircle2 size={20} className="text-green-400" />
-                          Matched Skills ({analysis.matchedSkills.length})
+                          Matched Skills
                         </h3>
                         <div className="flex flex-wrap gap-2">
                           {analysis.matchedSkills.map((skill: string, idx: number) => (
@@ -348,27 +307,22 @@ export default function JobSearchPage() {
                       </div>
                     )}
 
-                    {/* Missing Skills */}
                     {analysis.missingSkills?.length > 0 && (
                       <div>
                         <h3 className="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
                           <AlertCircle size={20} className="text-red-400" />
-                          Missing Skills ({analysis.missingSkills.length})
+                          Missing Skills
                         </h3>
                         <div className="space-y-2">
                           {analysis.missingSkills.map((skill: any, idx: number) => (
                             <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
                               <p className="text-red-200 font-medium">{typeof skill === 'string' ? skill : skill.skill}</p>
-                              {typeof skill === 'object' && skill.importance && (
-                                <p className="text-xs text-red-300 mt-1">Importance: {skill.importance}</p>
-                              )}
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Quick Wins */}
                     {analysis.quickWins?.length > 0 && (
                       <div>
                         <h3 className="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
@@ -385,71 +339,6 @@ export default function JobSearchPage() {
                         </ul>
                       </div>
                     )}
-
-                    {/* Critical Gaps */}
-                    {analysis.criticalGaps?.length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
-                          <AlertCircle size={20} className="text-orange-400" />
-                          Critical Gaps
-                        </h3>
-                        <ul className="space-y-2">
-                          {analysis.criticalGaps.map((gap: any, idx: number) => (
-                            <li key={idx} className="flex gap-2 text-slate-300">
-                              <span className="text-orange-400 mt-1">⚠</span>
-                              <span>{typeof gap === 'string' ? gap : JSON.stringify(gap)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Recommendations */}
-                    {analysis.recommendations?.length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-100 mb-3 flex items-center gap-2">
-                          <Sparkles size={20} className="text-blue-400" />
-                          Recommendations
-                        </h3>
-                        <ul className="space-y-2">
-                          {analysis.recommendations.map((rec: any, idx: number) => (
-                            <li key={idx} className="flex gap-2 text-slate-300">
-                              <span className="text-blue-400 mt-1">→</span>
-                              <span>{typeof rec === 'string' ? rec : rec.recommendation || JSON.stringify(rec)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Interview Topics */}
-                    {analysis.interviewTopics?.length > 0 && (
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-100 mb-3">Interview Preparation Topics</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {analysis.interviewTopics.map((topic: any, idx: number) => (
-                            <div key={idx} className="bg-slate-800/30 border border-slate-700 rounded-lg p-3">
-                              <p className="text-slate-300 text-sm">{typeof topic === 'string' ? topic : JSON.stringify(topic)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Next Steps */}
-                    {analysis.nextSteps?.length > 0 && (
-                      <div className="bg-brand-500/10 border border-brand-500/20 rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-slate-100 mb-3">Next Steps</h3>
-                        <ol className="space-y-2">
-                          {analysis.nextSteps.map((step: any, idx: number) => (
-                            <li key={idx} className="flex gap-3 text-slate-300">
-                              <span className="font-semibold text-brand-400">{idx + 1}.</span>
-                              <span>{typeof step === 'string' ? step : JSON.stringify(step)}</span>
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="flex items-center justify-center py-12 text-slate-400">
@@ -457,11 +346,10 @@ export default function JobSearchPage() {
                   </div>
                 )}
 
-                {/* Analyze Button */}
                 {!analysis && !analyzing && (
                   <button
                     onClick={() => handleAnalyzeJob(selectedJob)}
-                    className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-lg px-6 py-3 font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+                    className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-lg px-6 py-3 font-semibold transition-all flex items-center justify-center gap-2"
                   >
                     <Sparkles size={18} />
                     Analyze Match

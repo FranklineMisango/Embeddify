@@ -88,12 +88,11 @@ async def search_google_jobs(query: str, location: str, num_results: int = 15) -
         raise HTTPException(status_code=500, detail=f"Job search failed: {str(e)}")
 
 def is_valid_job_posting(title: str, snippet: str, url: str) -> bool:
-    """Filter out irrelevant search results - strict version"""
+    """Filter out only obvious non-job sources - lenient version"""
     title_lower = title.lower()
-    snippet_lower = snippet.lower()
     url_lower = url.lower()
     
-    # Exclude obvious non-job sources
+    # Only exclude obvious non-job sources
     exclude_domains = [
         "reddit.com",
         "twitter.com",
@@ -103,88 +102,39 @@ def is_valid_job_posting(title: str, snippet: str, url: str) -> bool:
         "tiktok.com",
         "youtube.com",
         "quora.com",
-        "medium.com",
-        "dev.to",
-        "stackoverflow.com",
-        "github.com",
         "wikipedia.org",
-        "news.",
-        "blog.",
     ]
     
     for domain in exclude_domains:
         if domain in url_lower:
             return False
     
-    # Exclude obvious list/aggregator pages
+    # Exclude obvious search result pages
     exclude_keywords = [
-        "jobs in ",
-        "jobs near ",
-        "job search results",
-        "browse all jobs",
         "search results",
-        "all jobs",
-        "view all",
-        "see all",
-        "more jobs",
-        "similar jobs",
-        "related jobs",
-        "r/",  # Reddit subreddit
-        "discussion",
-        "forum",
-        "thread",
-        "post",
+        "browse all jobs",
+        "view all jobs",
+        "see all jobs",
     ]
     
     for keyword in exclude_keywords:
         if keyword in title_lower:
             return False
     
-    # Exclude non-job URLs
-    if any(x in url_lower for x in ["/search?", "/results?", "/browse?", "/filter?", "/r/", "/t/", "/thread"]):
+    # Exclude non-job URLs (search pages, filters)
+    if any(x in url_lower for x in ["/search?", "/results?", "/browse?", "/filter?"]):
         return False
     
-    # Must have job-related keywords in title
-    job_keywords = ["job", "position", "role", "opening", "hire", "recruit", "career", "opportunity", "engineer", "developer", "analyst", "manager", "specialist", "coordinator", "associate", "intern", "vacancy", "recruitment"]
+    # Must have some job-related indicator
+    job_keywords = ["job", "position", "role", "opening", "hire", "recruit", "career", "opportunity", "engineer", "developer", "analyst", "manager", "specialist", "coordinator", "associate", "intern", "vacancy", "recruitment", "careers", "opportunities"]
     has_job_keyword = any(keyword in title_lower for keyword in job_keywords)
     
     if not has_job_keyword:
         return False
     
-    # Exclude very short titles (likely not real jobs)
-    if len(title) < 15:
+    # Minimum title length
+    if len(title) < 5:
         return False
-    
-    # Prefer known job boards and company career pages
-    preferred_domains = [
-        "linkedin.com",
-        "indeed.com",
-        "glassdoor.com",
-        "monster.com",
-        "dice.com",
-        "builtin.com",
-        "techcrunch.com/jobs",
-        "angel.co",
-        "crunchboard.com",
-        "hired.com",
-        "toptal.com",
-        "upwork.com",
-        "freelancer.com",
-        "careers.",  # company career pages
-        "jobs.",     # company job pages
-        "apply.",    # company apply pages
-    ]
-    
-    is_preferred = any(domain in url_lower for domain in preferred_domains)
-    
-    # If not from a preferred source, be extra strict
-    if not is_preferred:
-        # Must have very clear job indicators
-        strong_job_keywords = ["hiring", "now hiring", "apply now", "apply here", "job opening", "position available", "we are hiring", "we're hiring"]
-        has_strong_keyword = any(keyword in title_lower or keyword in snippet_lower for keyword in strong_job_keywords)
-        
-        if not has_strong_keyword:
-            return False
     
     return True
 
@@ -242,8 +192,8 @@ def extract_company(title: str, url: str = "") -> str:
     
     return "Unknown"
 
-def build_search_query(skills: list[str], level: str) -> str:
-    """Build a search query from skills and level"""
+def build_search_query(skills: list[str], level: str, job_title: str = None) -> str:
+    """Build a search query from skills and level, prioritizing actual job titles"""
     level_keywords = {
         "internship": "internship",
         "entry": "entry level junior",
@@ -253,17 +203,27 @@ def build_search_query(skills: list[str], level: str) -> str:
     }
     
     level_term = level_keywords.get(level, "")
-    skills_term = " OR ".join(skills[:5])  # Use top 5 skills
     
-    # Add site restrictions to prioritize job boards
-    return f'({level_term} {skills_term} engineer developer) (site:linkedin.com OR site:indeed.com OR site:glassdoor.com OR site:builtin.com OR site:dice.com OR site:hired.com OR site:angel.co OR "careers" OR "jobs" OR "apply now")'
+    # If we have a job title from the CV, use it as the primary search term
+    if job_title and job_title.strip() and len(job_title.strip()) > 2:
+        # Clean up the job title (remove file extensions, etc.)
+        clean_title = job_title.strip().replace(".pdf", "").replace(".docx", "").strip()
+        if clean_title and len(clean_title) > 2:
+            # Use job title as primary search term
+            return f"{level_term} {clean_title}"
+    
+    # Fallback: use top 3 skills for broader search
+    skills_term = " OR ".join(skills[:3]) if skills else "developer"
+    
+    # Simpler query without site restrictions to get more results
+    return f"{level_term} {skills_term}"
 
 @router.post("/search")
 async def search_jobs(req: JobSearchRequest):
     """Search for jobs based on skills, location, and level"""
     try:
         # Build search query
-        query = build_search_query(req.skills, req.level)
+        query = build_search_query(req.skills, req.level, req.job_title)
         
         # Search for jobs
         jobs = await search_google_jobs(query, req.location, num_results=15)
@@ -280,6 +240,104 @@ async def search_jobs(req: JobSearchRequest):
             "jobs": jobs,
             "count": len(jobs),
             "message": f"Found {len(jobs)} job opportunities"
+        }
+    except Exception as e:
+        print(f"[ERROR] Job search error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Job search failed: {str(e)}")
+
+@router.post("/search-and-rank")
+async def search_and_rank_jobs(req: JobSearchRequest):
+    """Search for jobs and intelligently rank them using AI based on CV persona"""
+    try:
+        # Build search query
+        query = build_search_query(req.skills, req.level, req.job_title)
+        
+        # Search for jobs
+        jobs = await search_google_jobs(query, req.location, num_results=15)
+        
+        if not jobs:
+            return {
+                "status": "success",
+                "jobs": [],
+                "message": "No jobs found matching your criteria"
+            }
+        
+        # If we have CV text, use AI to intelligently rank jobs
+        cv_text = req.job_title or ""  # Fallback if CV not provided
+        
+        if cv_text and len(jobs) > 0:
+            print(f"[DEBUG] Using AI to rank {len(jobs)} jobs based on CV persona...")
+            
+            # Prepare job summaries for AI ranking
+            jobs_summary = "\n".join([
+                f"{i+1}. Title: {job['title']}\n   Company: {job['company']}\n   Snippet: {job['snippet'][:200]}"
+                for i, job in enumerate(jobs)
+            ])
+            
+            ranking_prompt = f"""You are an expert recruiter. Analyze these job postings and rank them by how well they match the candidate's profile.
+
+CANDIDATE PROFILE:
+- Skills: {', '.join(req.skills[:10])}
+- Experience Level: {req.level}
+- Location: {req.location}
+
+JOB POSTINGS:
+{jobs_summary}
+
+Rank these jobs from best to worst match based on:
+1. Skill alignment with candidate's skills
+2. Experience level match
+3. Location match
+4. Company prestige and growth potential
+5. Role relevance to candidate's background
+
+Return ONLY a JSON object with this format:
+{{
+  "ranking": [
+    {{"position": 1, "job_index": 0, "match_score": 95, "reason": "Excellent match because..."}},
+    {{"position": 2, "job_index": 2, "match_score": 78, "reason": "Good match because..."}},
+    ...
+  ],
+  "summary": "Overall assessment of job market fit"
+}}
+
+Return ONLY valid JSON, no markdown, no explanations."""
+            
+            try:
+                ranking_response = await chat("You are a recruiter ranking jobs.", ranking_prompt)
+                
+                # Parse ranking response
+                cleaned = ranking_response.strip()
+                if cleaned.startswith("```"):
+                    if "```json" in cleaned:
+                        cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+                    else:
+                        cleaned = cleaned.split("```")[1].split("```")[0].strip()
+                
+                ranking_data = json.loads(cleaned)
+                
+                # Reorder jobs based on AI ranking
+                if "ranking" in ranking_data:
+                    ranked_jobs = []
+                    for rank_item in ranking_data["ranking"]:
+                        job_idx = rank_item.get("job_index", 0)
+                        if 0 <= job_idx < len(jobs):
+                            job = jobs[job_idx].copy()
+                            job["ai_match_score"] = rank_item.get("match_score", 0)
+                            job["ai_reason"] = rank_item.get("reason", "")
+                            ranked_jobs.append(job)
+                    
+                    jobs = ranked_jobs
+                    print(f"[DEBUG] AI ranked {len(jobs)} jobs")
+            except Exception as e:
+                print(f"[DEBUG] AI ranking failed, returning unranked results: {str(e)}")
+                # Fall back to unranked results
+        
+        return {
+            "status": "success",
+            "jobs": jobs,
+            "count": len(jobs),
+            "message": f"Found {len(jobs)} job opportunities (AI ranked)"
         }
     except Exception as e:
         print(f"[ERROR] Job search error: {str(e)}")
