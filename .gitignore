@@ -8,6 +8,7 @@
 **.synctex.gz
 **.toc
 **.env
+**.env.local
 **.vrb
 **.xdv
 **/node_modules/
