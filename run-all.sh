@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-POSTGRES_CONTAINER_NAME="cvmatcher-postgres"
+POSTGRES_CONTAINER_NAME="embeddify-postgres"
 POSTGRES_IMAGE="postgres:16"
-POSTGRES_DB="cvmatcher"
+POSTGRES_DB="embeddify"
 POSTGRES_USER="user"
 POSTGRES_PASSWORD="password"
 POSTGRES_PORT="5432"

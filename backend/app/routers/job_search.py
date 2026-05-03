@@ -15,6 +15,7 @@ class JobSearchRequest(BaseModel):
     location: str
     level: str  # "internship", "entry", "mid", "senior", "lead"
     job_title: Optional[str] = None
+    cv_text: Optional[str] = None  # Full CV text for AI persona analysis
 
 class JobAnalysisRequest(BaseModel):
     cv_text: str
@@ -30,57 +31,84 @@ class JobMatch(BaseModel):
     snippet: str
     posted_date: Optional[str] = None
 
-async def search_google_jobs(query: str, location: str, num_results: int = 15) -> list[dict]:
-    """Search for jobs using Google Custom Search API"""
+async def _fetch_google_page(client: httpx.AsyncClient, search_query: str, start: int, page_size: int) -> list[dict]:
+    """Fetch a single page of Google Custom Search results (start is 1-indexed)."""
+    params = {
+        "key": settings.google_search_api_key,
+        "cx": settings.google_search_engine_id,
+        "q": search_query,
+        "num": page_size,
+        "start": start,
+    }
+    response = await client.get("https://www.googleapis.com/customsearch/v1", params=params)
+    response.raise_for_status()
+    return response.json().get("items", [])
+
+
+async def search_google_jobs(query: str, location: str, num_results: int = 20) -> list[dict]:
+    """Search for jobs using Google Custom Search API.
+    
+    Fetches up to two pages of 10 to reach the requested num_results (max 20),
+    guaranteeing at least 10 results when available.
+    """
     if not settings.google_search_api_key or not settings.google_search_engine_id:
         raise HTTPException(status_code=400, detail="Google Search API not configured")
-    
+
+    # Google CSE hard limit: 10 per page, pages start at index 1 and 11
+    target = min(num_results, 20)
+    page_size = 10  # Google API max per request
+
+    search_query = f"{query} jobs {location}"
+    print(f"[DEBUG] Searching: {search_query} (target={target})")
+
     try:
         async with httpx.AsyncClient() as client:
-            # Build search query - more flexible to get results
-            search_query = f"{query} jobs {location}"
-            
-            params = {
-                "key": settings.google_search_api_key,
-                "cx": settings.google_search_engine_id,
-                "q": search_query,
-                "num": min(num_results, 10),  # Google API max is 10 per request
-            }
-            
-            print(f"[DEBUG] Searching: {search_query}")
-            response = await client.get("https://www.googleapis.com/customsearch/v1", params=params)
-            response.raise_for_status()
-            
-            results = response.json()
-            print(f"[DEBUG] Got {len(results.get('items', []))} results from Google")
-            
+            # Always fetch page 1
+            import asyncio
+            page1_task = _fetch_google_page(client, search_query, start=1, page_size=page_size)
+
+            # Fetch page 2 in parallel if we want more than 10
+            if target > 10:
+                page2_task = _fetch_google_page(client, search_query, start=11, page_size=page_size)
+                page1_items, page2_items = await asyncio.gather(page1_task, page2_task, return_exceptions=True)
+                raw_items = (page1_items if not isinstance(page1_items, Exception) else []) + \
+                            (page2_items if not isinstance(page2_items, Exception) else [])
+            else:
+                raw_items = await page1_task
+
+            print(f"[DEBUG] Got {len(raw_items)} raw results from Google")
+
             jobs = []
-            
-            if "items" in results:
-                for idx, item in enumerate(results["items"]):
-                    title = item.get("title", "")
-                    snippet = item.get("snippet", "")
-                    url = item.get("link", "")
-                    
-                    print(f"[DEBUG] Result {idx}: {title[:60]}... | URL: {url}")
-                    
-                    # More lenient filtering - just exclude obvious list pages
-                    if is_valid_job_posting(title, snippet, url):
-                        job = {
-                            "title": clean_job_title(title),
-                            "company": extract_company(title, url),
-                            "location": location,
-                            "url": url,
-                            "snippet": snippet,
-                            "posted_date": None,
-                        }
-                        jobs.append(job)
-                        print(f"[DEBUG] ✓ Added: {job['title']} at {job['company']}")
-                    else:
-                        print(f"[DEBUG] ✗ Filtered out: {title[:60]}...")
-            
+            seen_urls = set()
+
+            for idx, item in enumerate(raw_items):
+                title = item.get("title", "")
+                snippet = item.get("snippet", "")
+                url = item.get("link", "")
+
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+
+                print(f"[DEBUG] Result {idx}: {title[:60]} | URL: {url}")
+
+                if is_valid_job_posting(title, snippet, url):
+                    job = {
+                        "title": clean_job_title(title),
+                        "company": extract_company(title, url),
+                        "location": location,
+                        "url": url,
+                        "snippet": snippet,
+                        "posted_date": None,
+                    }
+                    jobs.append(job)
+                    print(f"[DEBUG] ✓ Added: {job['title']} at {job['company']}")
+                else:
+                    print(f"[DEBUG] ✗ Filtered: {title[:60]}")
+
             print(f"[DEBUG] Final: {len(jobs)} valid jobs after filtering")
             return jobs
+
     except Exception as e:
         print(f"[ERROR] Google Search failed: {str(e)}")
         import traceback
@@ -192,31 +220,104 @@ def extract_company(title: str, url: str = "") -> str:
     
     return "Unknown"
 
-def build_search_query(skills: list[str], level: str, job_title: str = None) -> str:
-    """Build a search query from skills and level, prioritizing actual job titles"""
-    level_keywords = {
+async def infer_candidate_persona(cv_text: str, skills: list[str], level: str) -> dict:
+    """Use AI to deeply analyze the CV and infer the candidate's ideal job persona."""
+    
+    level_labels = {
+        "internship": "internship / student",
+        "entry": "entry-level (0-2 years)",
+        "mid": "mid-level (2-5 years)",
+        "senior": "senior (5+ years)",
+        "lead": "lead / principal",
+    }
+    # These are the exact terms we'll inject into the Google query — not left to the AI
+    level_search_terms = {
         "internship": "internship",
-        "entry": "entry level junior",
+        "entry": "junior",
         "mid": "mid-level",
         "senior": "senior",
-        "lead": "lead principal",
+        "lead": "lead",
+        "any": "",   # no level filter
+        "": "",      # no level filter
+    }
+    level_label = level_labels.get(level, level)
+
+    prompt = f"""You are an expert career advisor and recruiter. Analyze this CV thoroughly and determine the candidate's professional identity.
+
+CANDIDATE EXPERIENCE LEVEL: {level_label}
+EXTRACTED SKILLS: {', '.join(skills[:20])}
+
+FULL CV TEXT:
+{cv_text[:4000]}
+
+Based on the CV, determine:
+1. What is this person's PRIMARY professional identity / strongest persona? (e.g. "quantitative researcher", "data scientist", "software engineer", "financial analyst")
+2. What are the TOP 3 most specific job titles that would be a perfect match?
+3. What industry/domain are they strongest in?
+4. What is the best 2-4 word job role description (NO level/seniority words, NO location) to search for this person? e.g. "quantitative researcher", "data scientist", "software engineer"
+
+Return ONLY a JSON object:
+{{
+  "primary_persona": "one clear job title that best describes this candidate",
+  "top_job_titles": ["title1", "title2", "title3"],
+  "industry": "primary industry or domain",
+  "role_query": "2-4 word role description only, no seniority or location",
+  "reasoning": "one sentence explaining why this persona fits"
+}}
+
+Return ONLY valid JSON, no markdown."""
+
+    try:
+        response = await chat("You are a career advisor identifying the best job search strategy for a candidate.", prompt)
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("```json")[1].split("```")[0].strip() if "```json" in cleaned else cleaned.split("```")[1].split("```")[0].strip()
+        persona = json.loads(cleaned)
+
+        # Always build the final search query ourselves so the level term is guaranteed
+        role_query = persona.get("role_query") or persona.get("primary_persona", " ".join(skills[:2]))
+        level_term = level_search_terms.get(level, "")
+        search_query = f"{level_term} {role_query}".strip()
+
+        persona["search_query"] = search_query
+        print(f"[DEBUG] AI persona: {persona.get('primary_persona')} | query: {search_query}")
+        return persona
+    except Exception as e:
+        print(f"[DEBUG] Persona inference failed: {e}, falling back to skills-based query")
+        skills_term = " ".join(skills[:2]) if skills else "developer"
+        level_term = level_search_terms.get(level, "")
+        return {
+            "primary_persona": skills_term,
+            "top_job_titles": [skills_term],
+            "industry": "technology",
+            "search_query": f"{level_term} {skills_term}".strip(),
+            "reasoning": "Fallback to skills-based query"
+        }
+
+
+def build_search_query(skills: list[str], level: str, job_title: str = None) -> str:
+    """Build a search query from skills and level, prioritizing actual job titles"""
+    level_search_terms = {
+        "internship": "internship",
+        "entry": "junior",
+        "mid": "mid-level",
+        "senior": "senior",
+        "lead": "lead",
+        "any": "",
+        "": "",
     }
     
-    level_term = level_keywords.get(level, "")
+    level_term = level_search_terms.get(level, "")
     
     # If we have a job title from the CV, use it as the primary search term
     if job_title and job_title.strip() and len(job_title.strip()) > 2:
-        # Clean up the job title (remove file extensions, etc.)
         clean_title = job_title.strip().replace(".pdf", "").replace(".docx", "").strip()
         if clean_title and len(clean_title) > 2:
-            # Use job title as primary search term
-            return f"{level_term} {clean_title}"
+            return f"{level_term} {clean_title}".strip()
     
-    # Fallback: use top 3 skills for broader search
-    skills_term = " OR ".join(skills[:3]) if skills else "developer"
-    
-    # Simpler query without site restrictions to get more results
-    return f"{level_term} {skills_term}"
+    # Fallback: use top 2 skills
+    skills_term = " ".join(skills[:2]) if skills else "developer"
+    return f"{level_term} {skills_term}".strip()
 
 @router.post("/search")
 async def search_jobs(req: JobSearchRequest):
@@ -226,7 +327,7 @@ async def search_jobs(req: JobSearchRequest):
         query = build_search_query(req.skills, req.level, req.job_title)
         
         # Search for jobs
-        jobs = await search_google_jobs(query, req.location, num_results=15)
+        jobs = await search_google_jobs(query, req.location, num_results=20)
         
         if not jobs:
             return {
@@ -247,97 +348,101 @@ async def search_jobs(req: JobSearchRequest):
 
 @router.post("/search-and-rank")
 async def search_and_rank_jobs(req: JobSearchRequest):
-    """Search for jobs and intelligently rank them using AI based on CV persona"""
+    """Search for jobs using AI-inferred candidate persona, then rank results against the full CV."""
     try:
-        # Build search query
-        query = build_search_query(req.skills, req.level, req.job_title)
-        
-        # Search for jobs
-        jobs = await search_google_jobs(query, req.location, num_results=15)
-        
+        # Step 1: Use AI to infer the candidate's persona from the full CV
+        if req.cv_text and len(req.cv_text.strip()) > 100:
+            print("[DEBUG] Inferring candidate persona from full CV text...")
+            persona = await infer_candidate_persona(req.cv_text, req.skills, req.level)
+            search_query = persona.get("search_query", "")
+            primary_persona = persona.get("primary_persona", "")
+            top_titles = persona.get("top_job_titles", [])
+            print(f"[DEBUG] Persona: {primary_persona} | Search: {search_query}")
+        else:
+            # Fallback to skills-based query
+            search_query = build_search_query(req.skills, req.level, req.job_title)
+            primary_persona = req.job_title or " ".join(req.skills[:2])
+            top_titles = []
+            print(f"[DEBUG] No CV text, using skills-based query: {search_query}")
+
+        # Step 2: Search Google with the persona-driven query
+        jobs = await search_google_jobs(search_query, req.location, num_results=20)
+
         if not jobs:
             return {
                 "status": "success",
                 "jobs": [],
+                "persona": primary_persona,
                 "message": "No jobs found matching your criteria"
             }
-        
-        # If we have CV text, use AI to intelligently rank jobs
-        cv_text = req.job_title or ""  # Fallback if CV not provided
-        
-        if cv_text and len(jobs) > 0:
-            print(f"[DEBUG] Using AI to rank {len(jobs)} jobs based on CV persona...")
-            
-            # Prepare job summaries for AI ranking
-            jobs_summary = "\n".join([
-                f"{i+1}. Title: {job['title']}\n   Company: {job['company']}\n   Snippet: {job['snippet'][:200]}"
-                for i, job in enumerate(jobs)
-            ])
-            
-            ranking_prompt = f"""You are an expert recruiter. Analyze these job postings and rank them by how well they match the candidate's profile.
 
-CANDIDATE PROFILE:
-- Skills: {', '.join(req.skills[:10])}
-- Experience Level: {req.level}
-- Location: {req.location}
+        # Step 3: AI ranking using full CV context
+        print(f"[DEBUG] Ranking {len(jobs)} jobs against full CV persona...")
 
-JOB POSTINGS:
+        jobs_summary = "\n".join([
+            f"{i+1}. Title: {job['title']}\n   Company: {job['company']}\n   Snippet: {job['snippet'][:200]}"
+            for i, job in enumerate(jobs)
+        ])
+
+        cv_context = req.cv_text[:2000] if req.cv_text else f"Skills: {', '.join(req.skills[:15])}"
+
+        ranking_prompt = f"""You are an expert recruiter. Rank these job postings by how well they match this specific candidate.
+
+CANDIDATE PERSONA: {primary_persona}
+IDEAL JOB TITLES: {', '.join(top_titles)}
+EXPERIENCE LEVEL: {req.level}
+LOCATION: {req.location}
+
+CV SUMMARY (first 2000 chars):
+{cv_context}
+
+JOB POSTINGS TO RANK:
 {jobs_summary}
 
-Rank these jobs from best to worst match based on:
-1. Skill alignment with candidate's skills
-2. Experience level match
-3. Location match
-4. Company prestige and growth potential
-5. Role relevance to candidate's background
+Rank ALL jobs from best to worst match. Consider:
+1. How closely the job title matches the candidate's persona and background
+2. Whether the required skills align with what's in the CV
+3. Seniority level match
+4. Industry/domain relevance
 
-Return ONLY a JSON object with this format:
+Return ONLY a JSON object:
 {{
   "ranking": [
-    {{"position": 1, "job_index": 0, "match_score": 95, "reason": "Excellent match because..."}},
-    {{"position": 2, "job_index": 2, "match_score": 78, "reason": "Good match because..."}},
+    {{"position": 1, "job_index": 0, "match_score": 95, "reason": "Matches candidate's X background because..."}},
     ...
-  ],
-  "summary": "Overall assessment of job market fit"
+  ]
 }}
 
-Return ONLY valid JSON, no markdown, no explanations."""
-            
-            try:
-                ranking_response = await chat("You are a recruiter ranking jobs.", ranking_prompt)
-                
-                # Parse ranking response
-                cleaned = ranking_response.strip()
-                if cleaned.startswith("```"):
-                    if "```json" in cleaned:
-                        cleaned = cleaned.split("```json")[1].split("```")[0].strip()
-                    else:
-                        cleaned = cleaned.split("```")[1].split("```")[0].strip()
-                
-                ranking_data = json.loads(cleaned)
-                
-                # Reorder jobs based on AI ranking
-                if "ranking" in ranking_data:
-                    ranked_jobs = []
-                    for rank_item in ranking_data["ranking"]:
-                        job_idx = rank_item.get("job_index", 0)
-                        if 0 <= job_idx < len(jobs):
-                            job = jobs[job_idx].copy()
-                            job["ai_match_score"] = rank_item.get("match_score", 0)
-                            job["ai_reason"] = rank_item.get("reason", "")
-                            ranked_jobs.append(job)
-                    
-                    jobs = ranked_jobs
-                    print(f"[DEBUG] AI ranked {len(jobs)} jobs")
-            except Exception as e:
-                print(f"[DEBUG] AI ranking failed, returning unranked results: {str(e)}")
-                # Fall back to unranked results
-        
+Include ALL {len(jobs)} jobs in the ranking. Return ONLY valid JSON."""
+
+        try:
+            ranking_response = await chat("You are a recruiter ranking jobs for a specific candidate.", ranking_prompt)
+            cleaned = ranking_response.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("```json")[1].split("```")[0].strip() if "```json" in cleaned else cleaned.split("```")[1].split("```")[0].strip()
+
+            ranking_data = json.loads(cleaned)
+
+            if "ranking" in ranking_data:
+                ranked_jobs = []
+                for rank_item in ranking_data["ranking"]:
+                    job_idx = rank_item.get("job_index", 0)
+                    if 0 <= job_idx < len(jobs):
+                        job = jobs[job_idx].copy()
+                        job["ai_match_score"] = rank_item.get("match_score", 0)
+                        job["ai_reason"] = rank_item.get("reason", "")
+                        ranked_jobs.append(job)
+                jobs = ranked_jobs
+                print(f"[DEBUG] AI ranked {len(jobs)} jobs")
+        except Exception as e:
+            print(f"[DEBUG] AI ranking failed, returning unranked: {e}")
+
         return {
             "status": "success",
             "jobs": jobs,
             "count": len(jobs),
-            "message": f"Found {len(jobs)} job opportunities (AI ranked)"
+            "persona": primary_persona,
+            "message": f"Found {len(jobs)} jobs matched to your profile as {primary_persona}"
         }
     except Exception as e:
         print(f"[ERROR] Job search error: {str(e)}")

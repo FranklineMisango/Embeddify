@@ -199,7 +199,7 @@ export default function Home() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-slate-100 mb-2">Welcome to CVMatcher</h1>
+        <h1 className="text-4xl font-bold text-slate-100 mb-2">Welcome to Embeddify</h1>
         <p className="text-slate-400">Upload your CV and discover personalized job opportunities with AI-powered matching</p>
       </div>
 

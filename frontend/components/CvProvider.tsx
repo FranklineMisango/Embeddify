@@ -25,11 +25,11 @@ export default function CvProvider({ children }: { children: React.ReactNode }) 
       setProfileState(loadCvProfile());
     };
 
-    window.addEventListener("cvmatcher:cv-updated", handleUpdate);
+    window.addEventListener("embeddify:cv-updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
 
     return () => {
-      window.removeEventListener("cvmatcher:cv-updated", handleUpdate);
+      window.removeEventListener("embeddify:cv-updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
   }, []);

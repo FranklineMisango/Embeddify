@@ -21,7 +21,7 @@ export default function Sidebar() {
     <header className="sticky top-0 z-30 border-b border-slate-800/90 bg-slate-950/85 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-brand-400">CVMatcher</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-brand-400">Embeddify</h1>
           <p className="text-sm text-slate-400">Upload once. Match everywhere.</p>
         </div>
 

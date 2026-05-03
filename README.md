@@ -1,4 +1,4 @@
-# CV Job Matcher
+# Embeddify
 
 ## Setup
 
@@ -31,7 +31,7 @@ chmod +x run-all.sh
 ```
 
 This starts:
-- PostgreSQL in Docker (`cvmatcher-postgres`)
+- PostgreSQL in Docker (`embeddify-postgres`)
 - FastAPI backend on port `8000`
 - Next.js frontend on port `3000`
 
@@ -40,7 +40,7 @@ Press `Ctrl+C` to stop backend and frontend. The Postgres container stays runnin
 ### Database
 Needs PostgreSQL running locally. The app auto-creates tables on startup.
 ```bash
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=cvmatcher postgres:16
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=embeddify postgres:16
 ```
 
 ## Usage

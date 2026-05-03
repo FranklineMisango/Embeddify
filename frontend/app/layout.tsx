@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 import CvProvider from "@/components/CvProvider";
 
 export const metadata: Metadata = {
-  title: "CVMatcher - AI Job Matching",
+  title: "Embeddify - AI Job Matching",
   description: "Upload your CV, find matching jobs, and get AI-powered advice",
 };
 

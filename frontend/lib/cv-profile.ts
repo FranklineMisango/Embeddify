@@ -20,7 +20,7 @@ export type CvProfile = {
   insights: CvInsights;
 };
 
-const STORAGE_KEY = "cvmatcher.cvProfile";
+const STORAGE_KEY = "embeddify.cvProfile";
 
 const SKILL_KEYWORDS = [
   // Programming Languages
@@ -368,7 +368,7 @@ export function saveCvProfile(profile: CvProfile) {
   }
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-  window.dispatchEvent(new Event("cvmatcher:cv-updated"));
+  window.dispatchEvent(new Event("embeddify:cv-updated"));
 }
 
 export function clearCvProfile() {
@@ -377,5 +377,5 @@ export function clearCvProfile() {
   }
 
   window.localStorage.removeItem(STORAGE_KEY);
-  window.dispatchEvent(new Event("cvmatcher:cv-updated"));
+  window.dispatchEvent(new Event("embeddify:cv-updated"));
 }
