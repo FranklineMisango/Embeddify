@@ -1,97 +1,48 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Briefcase, ListChecks, Search, Sparkles, CheckCircle2, AlertCircle, Zap } from "lucide-react";
+import { useState } from "react";
+import { Search, Briefcase, TrendingUp, CheckCircle2, FileText, Sparkles, ExternalLink, AlertCircle, Zap } from "lucide-react";
 import axios from "axios";
 import { useCvProfile } from "@/components/CvProvider";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const API_FALLBACK = API.includes("localhost")
-  ? API.replace("localhost", "127.0.0.1")
-  : API.includes("127.0.0.1")
-    ? API.replace("127.0.0.1", "localhost")
-    : null;
 
-const TABS = [
-  { id: "jd", label: "JD Analyzer", icon: Search },
-] as const;
-
-const formatRequestError = (error: unknown) => {
-  if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.detail;
-
-    if (typeof detail === "string") {
-      return detail;
-    }
-
-    if (Array.isArray(detail)) {
-      const messages = detail
-        .map((entry) => {
-          if (typeof entry === "string") {
-            return entry;
-          }
-
-          if (entry && typeof entry === "object" && "msg" in entry && typeof entry.msg === "string") {
-            return entry.msg;
-          }
-
-          return null;
-        })
-        .filter((message): message is string => Boolean(message));
-
-      if (messages.length > 0) {
-        return messages.join(" ");
-      }
-    }
-
-    if (error.response) {
-      return `Request failed with status ${error.response.status}.`;
-    }
-
-    return `Could not reach API at ${API}${API_FALLBACK ? ` (also tried ${API_FALLBACK})` : ""}.`;
-  }
-
-  return error instanceof Error ? error.message : "Failed to analyze match.";
-};
-
-export default function MatchPage() {
-  const { profile, hydrated } = useCvProfile();
+export default function ComprehensiveMatchPage() {
+  const { profile } = useCvProfile();
+  const [jd, setJd] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [company, setCompany] = useState("");
-  const [jd, setJd] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
+  const [error, setError] = useState("");
 
-  const hasCv = Boolean(profile?.text);
-
-  const analyze = async () => {
+  const handleAnalyze = async () => {
     if (!profile?.text) {
-      setAnalysisError("Upload your CV on Home first.");
+      setError("Please upload your CV first");
       return;
     }
 
     if (!jd.trim()) {
-      setAnalysisError("Paste a job description to analyze.");
+      setError("Please paste a job description");
       return;
     }
 
-    setAnalysisError("");
-    setAnalysisLoading(true);
+    setError("");
+    setAnalyzing(true);
 
     try {
-      const result = await axios.post(`${API}/job-search/analyze-jd`, {
+      const response = await axios.post(`${API}/job-search/analyze-jd`, {
         cv_text: profile.text,
         job_description: jd,
         job_title: jobTitle || "Job Opportunity",
         company: company || "Company",
       });
-      setAnalysis(result.data.analysis);
-    } catch (error: unknown) {
-      setAnalysisError(formatRequestError(error));
+
+      setAnalysis(response.data.analysis);
+    } catch (err) {
+      console.error("Analysis failed:", err);
+      setError("Analysis failed. Please try again.");
     } finally {
-      setAnalysisLoading(false);
+      setAnalyzing(false);
     }
   };
 
@@ -102,12 +53,6 @@ export default function MatchPage() {
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Comprehensive Job Match Analysis</h1>
         <p className="text-slate-400">Paste a job description to get detailed AI-powered matching analysis</p>
       </div>
-
-      {hydrated && !hasCv && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
-          Upload your CV on the Home tab first to enable job matching analysis.
-        </div>
-      )}
 
       {/* Input Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -143,32 +88,29 @@ export default function MatchPage() {
                 value={jd}
                 onChange={(e) => setJd(e.target.value)}
                 className="w-full h-64 bg-slate-900/50 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 resize-none"
-                disabled={!hasCv}
               />
             </div>
 
-            {analysisError && (
+            {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                {analysisError}
+                {error}
               </div>
             )}
 
             <button
-              onClick={analyze}
-              disabled={analysisLoading || !hasCv}
+              onClick={handleAnalyze}
+              disabled={analyzing || !profile}
               className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 font-semibold transition-all flex items-center justify-center gap-2"
             >
               <Sparkles size={18} />
-              {analysisLoading ? "Analyzing..." : "Analyze Match"}
+              {analyzing ? "Analyzing..." : "Analyze Match"}
             </button>
-
-            {!hasCv && <p className="text-sm text-slate-400">Upload your CV on Home to unlock analysis.</p>}
           </div>
         </div>
 
         {/* Analysis Results */}
         <div className="lg:col-span-2">
-          {analysisLoading ? (
+          {analyzing ? (
             <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 flex items-center justify-center min-h-96">
               <div className="text-center">
                 <div className="w-12 h-12 rounded-full border-2 border-brand-500 border-t-transparent animate-spin mx-auto mb-4"></div>
@@ -287,10 +229,10 @@ export default function MatchPage() {
                     Quick Wins
                   </h3>
                   <ul className="space-y-2">
-                    {analysis.quickWins.map((win: any, idx: number) => (
+                    {analysis.quickWins.map((win: string, idx: number) => (
                       <li key={idx} className="flex gap-2 text-slate-300">
                         <span className="text-yellow-400 mt-1">→</span>
-                        <span>{typeof win === 'string' ? win : JSON.stringify(win)}</span>
+                        <span>{win}</span>
                       </li>
                     ))}
                   </ul>
@@ -305,10 +247,10 @@ export default function MatchPage() {
                     Critical Gaps
                   </h3>
                   <ul className="space-y-2">
-                    {analysis.criticalGaps.map((gap: any, idx: number) => (
+                    {analysis.criticalGaps.map((gap: string, idx: number) => (
                       <li key={idx} className="flex gap-2 text-slate-300">
                         <span className="text-orange-400 mt-1">⚠</span>
-                        <span>{typeof gap === 'string' ? gap : JSON.stringify(gap)}</span>
+                        <span>{gap}</span>
                       </li>
                     ))}
                   </ul>
@@ -323,10 +265,10 @@ export default function MatchPage() {
                     Recommendations
                   </h3>
                   <ul className="space-y-2">
-                    {analysis.recommendations.map((rec: any, idx: number) => (
+                    {analysis.recommendations.map((rec: string, idx: number) => (
                       <li key={idx} className="flex gap-2 text-slate-300">
                         <span className="text-blue-400 mt-1">→</span>
-                        <span>{typeof rec === 'string' ? rec : rec.recommendation || JSON.stringify(rec)}</span>
+                        <span>{rec}</span>
                       </li>
                     ))}
                   </ul>
@@ -338,9 +280,9 @@ export default function MatchPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-slate-100 mb-3">Interview Preparation Topics</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {analysis.interviewTopics.map((topic: any, idx: number) => (
+                    {analysis.interviewTopics.map((topic: string, idx: number) => (
                       <div key={idx} className="bg-slate-800/30 border border-slate-700 rounded-lg p-3">
-                        <p className="text-slate-300 text-sm">{typeof topic === 'string' ? topic : JSON.stringify(topic)}</p>
+                        <p className="text-slate-300 text-sm">{topic}</p>
                       </div>
                     ))}
                   </div>
@@ -352,10 +294,10 @@ export default function MatchPage() {
                 <div className="bg-brand-500/10 border border-brand-500/20 rounded-lg p-4">
                   <h3 className="text-lg font-semibold text-slate-100 mb-3">Next Steps</h3>
                   <ol className="space-y-2">
-                    {analysis.nextSteps.map((step: any, idx: number) => (
+                    {analysis.nextSteps.map((step: string, idx: number) => (
                       <li key={idx} className="flex gap-3 text-slate-300">
                         <span className="font-semibold text-brand-400">{idx + 1}.</span>
-                        <span>{typeof step === 'string' ? step : JSON.stringify(step)}</span>
+                        <span>{step}</span>
                       </li>
                     ))}
                   </ol>

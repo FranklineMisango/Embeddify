@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import init_db
-from app.routers import jobs, cv
+from app.routers import jobs, cv, job_search
 
 app = FastAPI(title="CV Job Matcher API")
 
@@ -27,6 +27,7 @@ async def startup():
 
 app.include_router(jobs.router)
 app.include_router(cv.router)
+app.include_router(job_search.router)
 
 @app.get("/health")
 async def health():

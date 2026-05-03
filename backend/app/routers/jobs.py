@@ -50,6 +50,14 @@ async def list_jobs(status: str = None, db: AsyncSession = Depends(get_db)):
              "match_score": j.match_score, "match_breakdown": j.match_breakdown,
              "scraped_at": j.scraped_at} for j in jobs]
 
+@router.delete("/all")
+async def clear_all_jobs(db: AsyncSession = Depends(get_db)):
+    """Delete all scraped jobs from the database."""
+    from sqlalchemy import delete
+    await db.execute(delete(Job))
+    await db.commit()
+    return {"ok": True, "message": "All jobs cleared"}
+
 @router.patch("/{job_id}/status")
 async def update_status(job_id: int, body: StatusUpdate, db: AsyncSession = Depends(get_db)):
     job = await db.get(Job, job_id)

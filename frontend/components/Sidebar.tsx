@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Zap, Briefcase, FileText, UploadCloud } from "lucide-react";
+import { Home, Zap, Briefcase, FileText, UploadCloud, Search } from "lucide-react";
 import clsx from "clsx";
 import { useCvProfile } from "@/components/CvProvider";
 
 const nav = [
   { href: "/", label: "Home", icon: Home },
+  { href: "/search", label: "Search", icon: Search },
   { href: "/match", label: "Matches", icon: Zap },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/documents", label: "Documents", icon: FileText },

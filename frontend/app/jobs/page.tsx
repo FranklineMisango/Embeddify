@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Search, MapPin, Briefcase } from "lucide-react";
+import { Search, MapPin, Briefcase, Trash2 } from "lucide-react";
 import axios from "axios";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -10,6 +10,7 @@ export default function JobsPage() {
   const [location, setLocation] = useState("");
   const [sources, setSources] = useState(["linkedin", "indeed"]);
   const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [progress, setProgress] = useState(0);
 
@@ -26,11 +27,34 @@ export default function JobsPage() {
     setLoading(false);
   };
 
+  const clearJobs = async () => {
+    if (!confirm("Delete all scraped jobs from the database? This cannot be undone.")) return;
+    setClearing(true);
+    try {
+      await axios.delete(`${API}/jobs/all`);
+      setResult(null);
+    } catch (error) {
+      console.error(error);
+    }
+    setClearing(false);
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-4xl font-bold text-slate-100 mb-2">Scrape Jobs</h1>
         <p className="text-slate-400">Search and collect job listings from multiple sources</p>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={clearJobs}
+          disabled={clearing}
+          className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Trash2 size={15} />
+          {clearing ? "Clearing..." : "Clear All Jobs"}
+        </button>
       </div>
 
       <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 space-y-6">

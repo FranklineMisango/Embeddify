@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Upload, Briefcase, TrendingUp, CheckCircle2, FileText, Sparkles } from "lucide-react";
+import { Upload, Briefcase, TrendingUp, CheckCircle2, FileText, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
 import { makeCvProfile } from "@/lib/cv-profile";
@@ -57,40 +57,16 @@ const formatUploadError = (error: unknown) => {
 
 export default function Home() {
   const { profile, hydrated, setProfile } = useCvProfile();
-  const [stats, setStats] = useState({ totalJobs: 0, appliedJobs: 0, interviews: 0, offers: 0 });
-  const [recentJobs, setRecentJobs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [cvUploaded, setCvUploaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
 
   useEffect(() => {
-    fetchStats();
-  }, []);
-
-  useEffect(() => {
     setCvUploaded(Boolean(profile));
   }, [profile]);
 
-  const fetchStats = async () => {
-    try {
-      const response = await axios.get(`${API}/jobs/`);
-      const jobs = response.data;
-      setStats({
-        totalJobs: jobs.length,
-        appliedJobs: jobs.filter((j: any) => j.status === "applied").length,
-        interviews: jobs.filter((j: any) => j.status === "interview").length,
-        offers: jobs.filter((j: any) => j.status === "offer").length,
-      });
-      setRecentJobs(jobs.slice(0, 5));
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{stage: string; message: string; progress: number} | null>(null);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -104,6 +80,7 @@ export default function Home() {
     
     setUploading(true);
     setUploadError("");
+    setUploadProgress({ stage: "reading", message: "Starting upload...", progress: 0 });
     
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -115,10 +92,66 @@ export default function Home() {
 
       for (const base of candidates) {
         try {
-          response = await axios.post(`${base}/cv/upload`, formData);
-          break;
+          // Use streaming endpoint for real-time progress
+          const fetchResponse = await fetch(`${base}/cv/upload-stream`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!fetchResponse.ok) {
+            throw new Error(`HTTP ${fetchResponse.status}`);
+          }
+
+          // Process streaming response
+          const reader = fetchResponse.body?.getReader();
+          if (!reader) throw new Error("No response body");
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let hasError = false;
+          let errorMessage = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const event = JSON.parse(line);
+                
+                if (event.stage === "error") {
+                  hasError = true;
+                  errorMessage = event.message;
+                  console.error("[STREAM ERROR]", event.message);
+                  setUploadProgress({ stage: "error", message: event.message, progress: 0 });
+                } else if (event.stage === "complete" && event.data) {
+                  response = event.data;
+                  setUploadProgress({ stage: "complete", message: "Analysis complete!", progress: 100 });
+                } else {
+                  setUploadProgress({
+                    stage: event.stage,
+                    message: event.message,
+                    progress: event.progress,
+                  });
+                }
+              } catch (parseErr) {
+                console.error("Failed to parse event:", line, parseErr);
+              }
+            }
+          }
+
+          if (hasError) {
+            throw new Error(errorMessage || "Stream processing failed");
+          }
+
+          if (response) break;
         } catch (err: unknown) {
-          if (axios.isAxiosError(err) && !err.response) {
+          if (err instanceof TypeError && err.message.includes("fetch")) {
             networkFailure = true;
             continue;
           }
@@ -133,28 +166,32 @@ export default function Home() {
         throw new Error("UPLOAD_FAILED");
       }
 
-      const savedProfile = makeCvProfile({
+      const savedProfile = await makeCvProfile({
         filename: selectedFile.name,
-        text: response.data.text,
-        textPreview: response.data.text_preview,
-        textLength: response.data.text_length,
-        pageCount: response.data.page_count,
+        text: response.text,
+        textPreview: response.text_preview,
+        textLength: response.text_length,
+        pageCount: response.page_count,
       });
 
       setProfile(savedProfile);
 
       setCvUploaded(true);
       setUploadError("");
-      setUploadResult(response.data ?? null);
+      setUploadResult(response ?? null);
       // Reset form after success
       e.currentTarget.value = "";
-      setTimeout(() => setUploading(false), 1000);
+      setTimeout(() => {
+        setUploading(false);
+        setUploadProgress(null);
+      }, 1000);
     } catch (error: unknown) {
       console.error("Upload failed:", error);
       setUploadError(formatUploadError(error));
       setCvUploaded(false);
       setUploadResult(null);
       setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -193,10 +230,20 @@ export default function Home() {
           <div className="p-3 bg-brand-500/20 rounded-lg">
             <Upload className="text-brand-500" size={24} />
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-lg font-semibold text-slate-100">Upload Your CV</h2>
             <p className="text-sm text-slate-400">Get started by uploading your resume in PDF format</p>
           </div>
+          {profile && (
+            <button
+              onClick={() => { setProfile(null); setCvUploaded(false); setUploadResult(null); }}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-colors"
+              title="Clear uploaded CV"
+            >
+              <Trash2 size={15} />
+              Clear CV
+            </button>
+          )}
         </div>
         <label className="block cursor-pointer">
           <input
@@ -214,9 +261,23 @@ export default function Home() {
               : "border-brand-500/30 hover:border-brand-500/50"
           }`}>
             {uploading ? (
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-4">
                 <div className="w-5 h-5 rounded-full border-2 border-brand-500 border-t-transparent animate-spin"></div>
-                <p className="text-sm text-slate-300">Uploading your CV...</p>
+                <div className="space-y-3 w-full">
+                  <div>
+                    <p className="text-sm font-medium text-slate-300 mb-1">{uploadProgress?.message || "Uploading your CV..."}</p>
+                    <div className="w-full max-w-xs mx-auto h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all duration-300"
+                        style={{ width: `${uploadProgress?.progress || 0}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>{uploadProgress?.stage || "preparing"}</span>
+                    <span className="font-semibold text-brand-400">{uploadProgress?.progress || 0}%</span>
+                  </div>
+                </div>
               </div>
             ) : cvUploaded ? (
               <p className="text-sm text-green-400 font-medium">✓ CV uploaded successfully!</p>
@@ -275,6 +336,94 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {profile && (profile.insights.technicalProjects?.length > 0 || profile.insights.awards?.length > 0 || profile.insights.certifications?.length > 0 || profile.insights.researchAreas?.length > 0 || profile.insights.languages?.length > 0) && (
+          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {profile.insights.technicalProjects?.length > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 text-blue-400 mb-2">
+                  <Briefcase size={16} />
+                  <p className="text-sm font-semibold">Technical Projects</p>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  {profile.insights.technicalProjects.slice(0, 5).map((project, index) => (
+                    <li key={`${project}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                      <span className="text-blue-400 mt-1">→</span>
+                      <span>{project}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {profile.insights.awards?.length > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 text-yellow-400 mb-2">
+                  <TrendingUp size={16} />
+                  <p className="text-sm font-semibold">Awards & Recognition</p>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  {profile.insights.awards.slice(0, 5).map((award, index) => (
+                    <li key={`${award}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                      <span className="text-yellow-400 mt-1">★</span>
+                      <span>{award}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {profile.insights.certifications?.length > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 text-green-400 mb-2">
+                  <CheckCircle2 size={16} />
+                  <p className="text-sm font-semibold">Certifications</p>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  {profile.insights.certifications.slice(0, 5).map((cert, index) => (
+                    <li key={`${cert}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                      <span className="text-green-400 mt-1">✓</span>
+                      <span>{cert}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {profile.insights.researchAreas?.length > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 text-purple-400 mb-2">
+                  <FileText size={16} />
+                  <p className="text-sm font-semibold">Research Areas</p>
+                </div>
+                <ul className="space-y-2 text-sm text-slate-300">
+                  {profile.insights.researchAreas.slice(0, 5).map((area, index) => (
+                    <li key={`${area}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                      <span className="text-purple-400 mt-1">◆</span>
+                      <span>{area}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {profile.insights.languages?.length > 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 p-4">
+                <div className="flex items-center gap-2 text-cyan-400 mb-2">
+                  <Sparkles size={16} />
+                  <p className="text-sm font-semibold">Languages & Tools</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {profile.insights.languages.slice(0, 10).map((lang) => (
+                    <span key={lang} className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200">
+                      {lang}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {uploadResult && (
           <div className="mt-6 rounded-lg border border-slate-700 bg-slate-900/40 p-4">
             <p className="text-sm font-semibold text-slate-100 mb-3">Extracted CV text</p>
@@ -291,15 +440,15 @@ export default function Home() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link href="/jobs" className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all hover:border-brand-500/50 hover:shadow-lg hover:shadow-brand-500/10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link href="/search" className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all hover:border-brand-500/50 hover:shadow-lg hover:shadow-brand-500/10">
           <div className="flex items-start justify-between mb-3">
             <div className="p-2 bg-slate-700/50 group-hover:bg-brand-500/20 rounded-lg transition-colors">
               <Briefcase className="text-slate-400 group-hover:text-brand-500" size={20} />
             </div>
           </div>
-          <h3 className="font-semibold text-slate-100 mb-1">Scrape Jobs</h3>
-          <p className="text-sm text-slate-400">Search and scrape jobs from LinkedIn & Indeed</p>
+          <h3 className="font-semibold text-slate-100 mb-1">Search Jobs</h3>
+          <p className="text-sm text-slate-400">Find opportunities across the internet tailored to your skills</p>
         </Link>
 
         <Link href="/match" className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all hover:border-brand-500/50 hover:shadow-lg hover:shadow-brand-500/10">
@@ -311,58 +460,7 @@ export default function Home() {
           <h3 className="font-semibold text-slate-100 mb-1">Match Analysis</h3>
           <p className="text-sm text-slate-400">Get AI advice on your CV match with jobs</p>
         </Link>
-
-        <Link href="/documents" className="group p-6 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-lg transition-all hover:border-brand-500/50 hover:shadow-lg hover:shadow-brand-500/10">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 bg-slate-700/50 group-hover:bg-brand-500/20 rounded-lg transition-colors">
-              <FileText className="text-slate-400 group-hover:text-brand-500" size={20} />
-            </div>
-          </div>
-          <h3 className="font-semibold text-slate-100 mb-1">Documents</h3>
-          <p className="text-sm text-slate-400">Manage and customize your CVs</p>
-        </Link>
       </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Total Jobs</p>
-          <p className="text-2xl font-bold text-slate-100 mt-1">{stats.totalJobs}</p>
-        </div>
-        <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Applied</p>
-          <p className="text-2xl font-bold text-slate-100 mt-1">{stats.appliedJobs}</p>
-        </div>
-        <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Interviews</p>
-          <p className="text-2xl font-bold text-brand-400 mt-1">{stats.interviews}</p>
-        </div>
-        <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Offers</p>
-          <p className="text-2xl font-bold text-green-400 mt-1">{stats.offers}</p>
-        </div>
-      </div>
-
-      {/* Recent Jobs */}
-      {recentJobs.length > 0 && (
-        <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-slate-100 mb-4">Recent Jobs</h3>
-          <div className="space-y-3">
-            {recentJobs.map((job) => (
-              <div key={job.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-                <div className="flex-1">
-                  <p className="font-medium text-slate-100">{job.title}</p>
-                  <p className="text-sm text-slate-400">{job.company}</p>
-                </div>
-                <span className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-slate-700 text-slate-300">
-                  <CheckCircle2 size={14} />
-                  {job.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
