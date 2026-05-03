@@ -1,5 +1,74 @@
 # Embeddify
 
+> AI-powered job matching — upload your CV once, get ranked opportunities and deep match analysis everywhere.
+
+![Build](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat-square&logo=next.js)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat-square&logo=fastapi&logoColor=white)
+![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-6366f1?style=flat-square)
+![SentenceTransformers](https://img.shields.io/badge/NLP-Sentence--Transformers-orange?style=flat-square)
+![PostgreSQL](https://img.shields.io/badge/DB-PostgreSQL-336791?style=flat-square&logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
+
+---
+
+## App Flow
+
+### 1 — Upload your CV
+Upload your PDF once. Embeddify extracts the full text and runs it through DeepSeek to build a structured profile: skills, experience highlights, projects, publications, research areas, certifications, and awards.
+
+![CV Upload & Profile](images/cover_page_load_1.png)
+
+---
+
+### 2 — Explore your skill profile
+Review everything the AI extracted from your CV. Edit or confirm your key skills before searching.
+
+![Skills & Insights](images/cv_skills_2.png)
+
+---
+
+### 3 — Auto job search & deep match analysis
+The search page fires automatically on load. DeepSeek reads your full CV, infers your professional persona, and builds a targeted Google search query. Results are ranked by AI match score. Click any job to run a comprehensive analysis: overall match %, section-by-section breakdown, matched skills, missing skills, quick wins, critical gaps, recommendations, interview topics, and next steps.
+
+![Job Match Analysis](images/matcher_3.png)
+
+---
+
+## Tech Stack
+
+### AI & NLP
+| Component | Technology |
+|---|---|
+| LLM (CV analysis, persona inference, JD matching, ranking) | **DeepSeek** (`deepseek-chat`) via OpenAI-compatible API |
+| Fallback LLM | **OpenAI** `gpt-4o` |
+| Semantic similarity scoring | **Sentence Transformers** `all-MiniLM-L6-v2` |
+| Cosine similarity | **scikit-learn** |
+| Job search | **Google Custom Search API** (2 parallel pages → up to 20 results) |
+| CV text extraction | **PyPDF2** |
+| JD scraping | **Playwright** + **BeautifulSoup4** |
+
+### Backend
+| Component | Technology |
+|---|---|
+| API framework | **FastAPI** + **Uvicorn** |
+| Database ORM | **SQLAlchemy** + **Alembic** |
+| Database | **PostgreSQL 16** |
+| Async HTTP | **httpx** |
+| Task queue | **Celery** + **Redis** |
+
+### Frontend
+| Component | Technology |
+|---|---|
+| Framework | **Next.js 14** (App Router) |
+| Language | **TypeScript** |
+| Styling | **Tailwind CSS** |
+| HTTP client | **Axios** |
+| State | React Context + localStorage |
+
+---
+
 ## Setup
 
 ### Backend
@@ -11,7 +80,7 @@ cp .env.example .env   # fill in your keys
 uvicorn app.main:app --reload
 ```
 
-If you want to start the backend from the repository root instead of `cd backend`, use:
+Or from the repo root:
 ```bash
 uvicorn app.main:app --app-dir backend --reload
 ```
@@ -24,7 +93,6 @@ npm run dev
 ```
 
 ### Run Everything With One Command
-From the repo root:
 ```bash
 chmod +x run-all.sh
 ./run-all.sh
@@ -35,16 +103,41 @@ This starts:
 - FastAPI backend on port `8000`
 - Next.js frontend on port `3000`
 
-Press `Ctrl+C` to stop backend and frontend. The Postgres container stays running.
+Press `Ctrl+C` to stop backend and frontend. The Postgres container keeps running.
 
-### Database
-Needs PostgreSQL running locally. The app auto-creates tables on startup.
+### Database (manual)
 ```bash
 docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password -e POSTGRES_DB=embeddify postgres:16
 ```
 
-## Usage
-1. Go to `/jobs` → scrape LinkedIn/Indeed
-2. Go to `/match` → upload your CV PDF + paste a JD, then see match viz
-3. Go to `/cv` → let DeepSeek rewrite your CV for the role, download `.tex`
-4. Dashboard → Kanban tracker for all jobs
+Tables are created automatically on first startup.
+
+---
+
+## Environment Variables
+
+**`backend/.env`**
+```
+DEEPSEEK_API_KEY=...
+OPENAI_API_KEY=...          # optional fallback
+LLM_PROVIDER=deepseek
+GOOGLE_SEARCH_API_KEY=...
+GOOGLE_SEARCH_ENGINE_ID=...
+DATABASE_URL=postgresql://user:password@localhost:5432/embeddify
+```
+
+**`frontend/.env.local`**
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+---
+
+## Features
+
+- **Auto job search** — fires on page load, no manual query needed
+- **AI persona inference** — DeepSeek reads your full CV and determines your professional identity before searching
+- **Comprehensive JD analysis** — 10+ dimensions: overall match, section scores, matched/missing skills, quick wins, critical gaps, recommendations, interview prep, next steps
+- **CV customizer** — DeepSeek rewrites your CV for a specific role, outputs `.tex`
+- **Kanban tracker** — track applications across Scraped → Applied → Interview → Offer → Rejected
+- **Semantic scoring** — `all-MiniLM-L6-v2` embeddings for cosine similarity matching (AlphaFold-inspired per-section confidence scores)
