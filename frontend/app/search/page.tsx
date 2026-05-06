@@ -7,7 +7,7 @@ import { useCvProfile } from "@/components/CvProvider";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const LEVELS = [
-  { value: "", label: "Any Level" },
+  { value: "any", label: "Any Level" },
   { value: "internship", label: "Internship" },
   { value: "entry", label: "Entry Level" },
   { value: "mid", label: "Mid-Level" },
@@ -192,7 +192,8 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
 export default function JobSearchPage() {
   const { profile, hydrated } = useCvProfile();
 
-  // Filters — optional, empty = no filter applied to query
+  // Search setup + filters
+  const [searchConfigured, setSearchConfigured] = useState(false);
   const [location, setLocation] = useState("");
   const [level, setLevel] = useState("");
   const [locationInput, setLocationInput] = useState("");
@@ -240,23 +241,38 @@ export default function JobSearchPage() {
     }
   }, [profile]);
 
-  // ── Auto-search on mount once profile is ready ────────────────────────────
+  // ── Auto-search only after the user has explicitly configured the search ──
   useEffect(() => {
-    if (hydrated && profile) {
-      runSearch("", "");
+    if (hydrated && profile && searchConfigured) {
+      runSearch(location, level);
     }
-  }, [hydrated, profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hydrated, profile, searchConfigured, location, level]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filter handlers ───────────────────────────────────────────────────────
   const applyLocation = () => {
     const loc = locationInput.trim();
     setLocation(loc);
-    runSearch(loc, level);
+    if (searchConfigured) {
+      runSearch(loc, level);
+    }
   };
 
   const applyLevel = (lvl: string) => {
     setLevel(lvl);
-    runSearch(location, lvl);
+    if (searchConfigured) {
+      runSearch(location, lvl);
+    }
+  };
+
+  const startSearch = () => {
+    const loc = locationInput.trim();
+    if (!loc || !level) {
+      return;
+    }
+
+    setLocation(loc);
+    setSearchConfigured(true);
+    runSearch(loc, level);
   };
 
   // ── Job analysis ──────────────────────────────────────────────────────────
@@ -334,7 +350,7 @@ export default function JobSearchPage() {
         </div>
         <button
           onClick={() => runSearch(location, level)}
-          disabled={loading}
+          disabled={loading || !searchConfigured}
           title="Refresh results"
           className="mt-1 p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 disabled:opacity-40 transition-all"
         >
@@ -342,55 +358,105 @@ export default function JobSearchPage() {
         </button>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* Location */}
-        <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
-          <MapPin size={15} className="text-slate-400 shrink-0" />
-          <input
-            type="text"
-            placeholder="Location (optional)"
-            value={locationInput}
-            onChange={(e) => setLocationInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && applyLocation()}
-            className="bg-transparent text-sm text-slate-100 placeholder-slate-500 focus:outline-none w-44"
-          />
-          {locationInput.trim() && locationInput.trim() !== location && (
-            <button
-              onClick={applyLocation}
-              className="text-xs text-brand-400 hover:text-brand-300 font-medium shrink-0"
-            >
-              Apply
-            </button>
-          )}
-          {location && (
-            <button
-              onClick={() => { setLocationInput(""); setLocation(""); runSearch("", level); }}
-              className="text-xs text-slate-500 hover:text-slate-300 shrink-0"
-            >
-              ✕
-            </button>
-          )}
-        </div>
+      {!searchConfigured ? (
+        <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-6 space-y-5">
+          <div>
+            <h2 className="text-xl font-semibold text-slate-100">Set your search preferences</h2>
+            <p className="text-sm text-slate-400 mt-1">Choose a location and seniority level before we query the job engine.</p>
+          </div>
 
-        {/* Level chips */}
-        <div className="flex flex-wrap gap-2">
-          {LEVELS.map((l) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300 flex items-center gap-2">
+                <MapPin size={14} className="text-slate-400" />
+                Location
+              </span>
+              <input
+                type="text"
+                placeholder="e.g. London, Remote, New York"
+                value={locationInput}
+                onChange={(e) => setLocationInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && startSearch()}
+                className="w-full rounded-lg bg-slate-900/60 border border-slate-700 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500/70"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">Seniority level</span>
+              <select
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+                className="w-full rounded-lg bg-slate-900/60 border border-slate-700 px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-brand-500/70"
+              >
+                <option value="" disabled>Select a seniority level</option>
+                {LEVELS.map((l) => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-slate-500">You can refine location and level after the first search.</p>
             <button
-              key={l.value}
-              onClick={() => applyLevel(l.value)}
-              disabled={loading}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-50 ${
-                level === l.value
-                  ? "bg-brand-500 border-brand-500 text-white"
-                  : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-brand-500/60 hover:text-slate-100"
-              }`}
+              onClick={startSearch}
+              disabled={!locationInput.trim() || !level || loading}
+              className="bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-lg px-5 py-2.5 font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {l.label}
+              Search jobs
             </button>
-          ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Location */}
+          <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
+            <MapPin size={15} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="Location"
+              value={locationInput}
+              onChange={(e) => setLocationInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyLocation()}
+              className="bg-transparent text-sm text-slate-100 placeholder-slate-500 focus:outline-none w-44"
+            />
+            {locationInput.trim() && locationInput.trim() !== location && (
+              <button
+                onClick={applyLocation}
+                className="text-xs text-brand-400 hover:text-brand-300 font-medium shrink-0"
+              >
+                Apply
+              </button>
+            )}
+            {location && (
+              <button
+                onClick={() => { setLocationInput(""); setLocation(""); runSearch("", level); }}
+                className="text-xs text-slate-500 hover:text-slate-300 shrink-0"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Level chips */}
+          <div className="flex flex-wrap gap-2">
+            {LEVELS.map((l) => (
+              <button
+                key={l.value}
+                onClick={() => applyLevel(l.value)}
+                disabled={loading}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-50 ${
+                  level === l.value
+                    ? "bg-brand-500 border-brand-500 text-white"
+                    : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-brand-500/60 hover:text-slate-100"
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Results grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

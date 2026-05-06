@@ -45,6 +45,36 @@ async def _fetch_google_page(client: httpx.AsyncClient, search_query: str, start
     return response.json().get("items", [])
 
 
+def _build_google_query_variants(query: str, location: str) -> list[str]:
+    """Generate progressively broader search queries for fragile Custom Search scopes."""
+    base_query = query.strip()
+    location_query = location.strip()
+
+    variants = []
+
+    if base_query and location_query:
+        variants.append(f"{base_query} jobs {location_query}")
+        variants.append(f"{base_query} {location_query}")
+
+    if base_query:
+        variants.append(f"{base_query} jobs")
+        variants.append(base_query)
+
+    if location_query:
+        variants.append(f"jobs {location_query}")
+
+    variants.append("jobs")
+
+    deduped = []
+    seen = set()
+    for variant in variants:
+        normalized = " ".join(variant.split())
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
+
+
 async def search_google_jobs(query: str, location: str, num_results: int = 20) -> list[dict]:
     """Search for jobs using Google Custom Search API.
     
@@ -58,56 +88,59 @@ async def search_google_jobs(query: str, location: str, num_results: int = 20) -
     target = min(num_results, 20)
     page_size = 10  # Google API max per request
 
-    search_query = f"{query} jobs {location}"
-    print(f"[DEBUG] Searching: {search_query} (target={target})")
-
     try:
         async with httpx.AsyncClient() as client:
-            # Always fetch page 1
             import asyncio
-            page1_task = _fetch_google_page(client, search_query, start=1, page_size=page_size)
 
-            # Fetch page 2 in parallel if we want more than 10
-            if target > 10:
-                page2_task = _fetch_google_page(client, search_query, start=11, page_size=page_size)
-                page1_items, page2_items = await asyncio.gather(page1_task, page2_task, return_exceptions=True)
-                raw_items = (page1_items if not isinstance(page1_items, Exception) else []) + \
-                            (page2_items if not isinstance(page2_items, Exception) else [])
-            else:
-                raw_items = await page1_task
+            for search_query in _build_google_query_variants(query, location):
+                print(f"[DEBUG] Searching: {search_query} (target={target})")
 
-            print(f"[DEBUG] Got {len(raw_items)} raw results from Google")
+                page1_task = _fetch_google_page(client, search_query, start=1, page_size=page_size)
 
-            jobs = []
-            seen_urls = set()
-
-            for idx, item in enumerate(raw_items):
-                title = item.get("title", "")
-                snippet = item.get("snippet", "")
-                url = item.get("link", "")
-
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
-
-                print(f"[DEBUG] Result {idx}: {title[:60]} | URL: {url}")
-
-                if is_valid_job_posting(title, snippet, url):
-                    job = {
-                        "title": clean_job_title(title),
-                        "company": extract_company(title, url),
-                        "location": location,
-                        "url": url,
-                        "snippet": snippet,
-                        "posted_date": None,
-                    }
-                    jobs.append(job)
-                    print(f"[DEBUG] ✓ Added: {job['title']} at {job['company']}")
+                # Fetch page 2 in parallel if we want more than 10
+                if target > 10:
+                    page2_task = _fetch_google_page(client, search_query, start=11, page_size=page_size)
+                    page1_items, page2_items = await asyncio.gather(page1_task, page2_task, return_exceptions=True)
+                    raw_items = (page1_items if not isinstance(page1_items, Exception) else []) + \
+                                (page2_items if not isinstance(page2_items, Exception) else [])
                 else:
-                    print(f"[DEBUG] ✗ Filtered: {title[:60]}")
+                    raw_items = await page1_task
 
-            print(f"[DEBUG] Final: {len(jobs)} valid jobs after filtering")
-            return jobs
+                print(f"[DEBUG] Got {len(raw_items)} raw results from Google")
+
+                jobs = []
+                seen_urls = set()
+
+                for idx, item in enumerate(raw_items):
+                    title = item.get("title", "")
+                    snippet = item.get("snippet", "")
+                    url = item.get("link", "")
+
+                    if url in seen_urls:
+                        continue
+                    seen_urls.add(url)
+
+                    print(f"[DEBUG] Result {idx}: {title[:60]} | URL: {url}")
+
+                    if is_valid_job_posting(title, snippet, url):
+                        job = {
+                            "title": clean_job_title(title),
+                            "company": extract_company(title, url),
+                            "location": location,
+                            "url": url,
+                            "snippet": snippet,
+                            "posted_date": None,
+                        }
+                        jobs.append(job)
+                        print(f"[DEBUG] ✓ Added: {job['title']} at {job['company']}")
+                    else:
+                        print(f"[DEBUG] ✗ Filtered: {title[:60]}")
+
+                print(f"[DEBUG] Final: {len(jobs)} valid jobs after filtering")
+                if jobs:
+                    return jobs
+
+            return []
 
     except Exception as e:
         print(f"[ERROR] Google Search failed: {str(e)}")

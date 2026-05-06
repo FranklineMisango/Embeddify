@@ -5,12 +5,14 @@ import io
 import re
 import json
 from pathlib import Path
+from typing import Optional
 
 from PyPDF2 import PdfReader
 
 from app.cv_builder.customizer import customize_cv
 from app.nlp.matcher import score_match
 from app.cv_builder.customizer import CV_FILES, REPO_ROOT
+from app.routers.job_search import search_google_jobs
 
 router = APIRouter(prefix="/cv", tags=["cv"])
 
@@ -32,9 +34,31 @@ class ScoreTextRequest(BaseModel):
     cv_text: str
     job_description: str
 
+class StrategyRequest(BaseModel):
+    cv_text: str
+    target_role: str
+    location: str = "worldwide"
+    seniority: str = "any"
+
 # Directory to store uploaded CVs
 UPLOAD_DIR = Path(REPO_ROOT) / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+VARIANT_LABELS = {
+    "data_science": "Data Science",
+    "quant": "Quant Research",
+    "bi_sc": "BI / Supply Chain",
+    "research": "Research",
+    "full": "Full CV",
+}
+
+VARIANT_HINTS = {
+    "quant": ["quant", "quantitative", "trading", "portfolio", "alpha", "risk", "derivatives", "research"],
+    "research": ["research", "publication", "paper", "phd", "literature", "experiment", "academic"],
+    "bi_sc": ["business intelligence", "supply chain", "operations", "forecast", "inventory", "power bi", "tableau"],
+    "data_science": ["data science", "machine learning", "analytics", "model", "python", "sql", "experiment"],
+    "full": ["leadership", "stakeholder", "cross-functional", "strategy", "delivery", "generalist"],
+}
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -52,6 +76,35 @@ def _normalize_text(text: str) -> str:
     text = re.sub(r"[\t ]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def _truncate(text: str, limit: int = 2400) -> str:
+    cleaned = _normalize_text(text)
+    return cleaned[:limit]
+
+
+def _select_reference_variant(target_role: str, cv_text: str) -> tuple[str, dict[str, int]]:
+    combined = f"{target_role}\n{cv_text}".lower()
+    scores: dict[str, int] = {}
+
+    for variant, hints in VARIANT_HINTS.items():
+        score = 0
+        for hint in hints:
+            if hint in combined:
+                score += 2
+        scores[variant] = score
+
+    best_variant = max(scores, key=scores.get)
+    if scores[best_variant] == 0:
+        best_variant = "data_science" if "data" in combined or "ml" in combined else "full"
+
+    return best_variant, scores
+
+
+def _load_reference_template(variant: str) -> str:
+    template_path = REPO_ROOT / CV_FILES.get(variant, CV_FILES["data_science"])
+    return template_path.read_text()
+
 
 @router.post("/customize")
 async def customize(req: CustomizeRequest):
@@ -149,6 +202,33 @@ Return the JSON object with comprehensive extracted information."""
         print(f"Failed to parse AI response: {response}")
         print(f"JSON Error: {e}")
         raise HTTPException(status_code=500, detail=f"AI failed to return valid JSON. Response: {response[:200]}")
+
+@router.post("/target-strategy")
+async def target_strategy(req: StrategyRequest):
+    """
+    Generate a deep target-role strategy using LangGraph ReAct agent.
+    Orchestrates: variant selection → job fetching → strategy synthesis.
+    """
+    if not req.cv_text.strip():
+        raise HTTPException(status_code=400, detail="CV text cannot be empty")
+    if not req.target_role.strip():
+        raise HTTPException(status_code=400, detail="Target role cannot be empty")
+
+    try:
+        from app.strategy_agent import run_strategy_workflow
+
+        target_role = req.target_role.strip()
+        location = req.location.strip() or "worldwide"
+        seniority = req.seniority.strip() or "any"
+
+        result = await run_strategy_workflow(target_role, req.cv_text, location, seniority)
+        return result
+
+    except Exception as e:
+        print(f"[ERROR] Strategy analysis error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Strategy analysis failed: {str(e)}")
 
 @router.post("/upload-stream")
 async def upload_cv_stream(file: UploadFile = File(...)):
