@@ -1,6 +1,6 @@
 # Embeddify
 
-> AI-powered job matching & strategic career planning — upload your CV once, get ranked opportunities, deep match analysis, and agentic target-role strategy.
+> A job matching & strategic career planning Application — upload your CV once, get ranked opportunities, deep match analysis, and agentic target-role strategy.
 
 ![Build](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
