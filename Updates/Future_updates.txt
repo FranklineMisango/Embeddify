@@ -1,0 +1,10 @@
+| **Feature** | **Implementation Layer** |
+| --- | --- |
+| Soft skills | NLP + sentiment analysis |
+| Contextual relevance | Weighted scoring engine |
+| Bias detection | Language processing module |
+| Portfolio integration | External API connectors |
+| ATS simulation | Resume parser + format checker |
+| Tailored resumes | AI text generation |
+| Interview prep | Question generator + feedback loop |
+| Career mapping | Predictive analytics engine |

@@ -166,3 +166,29 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - **CV profile extraction** — Structured insights from your resume: skills, highlights, projects, publications, research areas, certifications
 - **Kanban tracker** — track applications across Scraped → Applied → Interview → Offer → Rejected
 - **Semantic scoring** — `all-MiniLM-L6-v2` embeddings for cosine similarity matching
+
+## Future Upgrades
+
+### Soft skills analysis  
+Most apps only check for hard skills and keywords. Users want tools that can detect communication, leadership, adaptability, and cultural fit indicators from resumes.
+
+### Contextual experience relevance  
+Current matchers often treat all skills equally. People want weighting based on recency, industry relevance, and depth of experience rather than just keyword presence.
+
+### Bias detection  
+Job seekers and recruiters alike ask for systems that flag potentially biased language in job descriptions or resumes (e.g., gendered wording, age-related phrasing).
+
+### Portfolio and project integration  
+Many professionals want CV matchers to evaluate linked portfolios, GitHub repos, or case studies, not just text resumes.
+
+### ATS simulation  
+Users often request a feature that shows how their resume would perform in actual Applicant Tracking Systems, including formatting checks and parsing accuracy.
+
+### Tailored resume generation  
+While some apps suggest missing keywords, few automatically generate optimized resume versions tailored to each job description.
+
+### Interview readiness insights  
+Some experimental tools generate interview questions, but users want more robust simulations that highlight likely recruiter questions based on the job description.
+
+### Career trajectory mapping  
+People want apps to suggest not just fit for one job, but how their resume aligns with long-term career paths across industries

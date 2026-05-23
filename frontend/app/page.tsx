@@ -198,11 +198,6 @@ export default function Home() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-slate-100 mb-2">Welcome to Embeddify</h1>
-        <p className="text-slate-400">Upload your CV and discover personalized job opportunities with AI-powered matching</p>
-      </div>
-
       {hydrated && profile && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="p-4 bg-slate-800/30 border border-slate-700 rounded-lg">
