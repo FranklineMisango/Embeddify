@@ -140,7 +140,7 @@ export default function DocumentsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-4xl font-bold text-slate-100 mb-2">Documents</h1>
-          <p className="text-slate-400">Your current resume is the source variant. Upload it first to generate a target-role strategy.</p>
+          <p className="text-slate-400">Your current resume is the source. Upload it first to generate a target-role strategy.</p>
         </div>
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-100">
           Upload your CV on the Home tab to unlock the strategy analysis, focus notes, and cited recommendations.
@@ -154,7 +154,7 @@ export default function DocumentsPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-4xl font-bold text-slate-100 mb-2">Documents</h1>
-          <p className="text-slate-400">Current resume as the source variant. Target role drives the analysis, template comparison, and focus notes.</p>
+          <p className="text-slate-400">Current resume is the source. Target role drives the analysis, style suggestions, and focus notes.</p>
         </div>
 
         <button
@@ -434,7 +434,7 @@ export default function DocumentsPage() {
                 <p className="mt-1 text-sm leading-6 text-slate-400">Generate focus notes, sentiment, cited evidence, a similar template reference, and a concrete action plan for the role you want.</p>
               </div>
               <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
-                Your current resume is the source variant. The target role becomes the analysis variant.
+                Your current resume is the source. The target role becomes the analysis focus.
               </div>
             </div>
           )}

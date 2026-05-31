@@ -8,10 +8,9 @@ class Settings(BaseSettings):
     llm_provider: str = "deepseek"  # "deepseek" | "openai"
     database_url: str = "postgresql://user:password@localhost:5432/embeddify"
     redis_url: str = "redis://localhost:6379"
-    google_search_api_key: str = Field(default="", validation_alias="GOOGLE_API_KEY")
+    google_search_api_key: str = ""
     google_search_engine_id: str = ""
 
-    class Config:
-        env_file = str(Path(__file__).parent.parent / ".env")
+    model_config = {"extra": "ignore"}
 
 settings = Settings()

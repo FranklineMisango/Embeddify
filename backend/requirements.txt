@@ -4,7 +4,7 @@ playwright
 beautifulsoup4
 httpx
 openai
-sentence-transformers
+sentence-transformers==2.7.0
 scikit-learn
 numpy
 psycopg2-binary

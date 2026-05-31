@@ -1,0 +1,88 @@
+# =============================================================================
+# Docker Compose — Embeddify (CV Job Matcher)
+#
+# Services:
+#   postgres   — database
+#   redis      — task queue broker (Celery)
+#   backend    — FastAPI + sentence-transformers (PyTorch 2.3.1 CPU-only)
+#   frontend   — Next.js (standalone output)
+#
+# The backend's PyTorch is pinned to 2.3.1 (CPU) so that
+# sentence-transformers works on ANY host architecture, including macOS
+# (which dropped support for PyTorch ≥ 2.4).
+# =============================================================================
+
+services:
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: embeddify-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: embeddify
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d embeddify"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: embeddify-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Backend (FastAPI) ─────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: embeddify-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override DB/REDIS hostnames for Docker networking
+      DATABASE_URL: "postgresql://user:password@postgres:5432/embeddify"
+      REDIS_URL: "redis://redis:6379"
+    volumes:
+      # Mount the backend source for hot-reload (uvicorn --reload)
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: embeddify-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

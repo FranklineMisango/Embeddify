@@ -11,8 +11,8 @@ from PyPDF2 import PdfReader
 
 from app.cv_builder.customizer import customize_cv
 from app.nlp.matcher import score_match
-from app.cv_builder.customizer import CV_FILES, REPO_ROOT
 from app.routers.job_search import search_google_jobs
+from app.constants import VARIANT_LABELS, VARIANT_HINTS
 
 router = APIRouter(prefix="/cv", tags=["cv"])
 
@@ -28,7 +28,8 @@ async def send_progress(stage: str, message: str, progress: int = 0) -> str:
 
 class CustomizeRequest(BaseModel):
     variant: str = "data_science"  # data_science|quant|bi_sc|research|full
-    job_description: str
+    cv_text: str = ""
+    job_description: str = ""
 
 class ScoreTextRequest(BaseModel):
     cv_text: str
@@ -41,24 +42,10 @@ class StrategyRequest(BaseModel):
     seniority: str = "any"
 
 # Directory to store uploaded CVs
-UPLOAD_DIR = Path(REPO_ROOT) / "uploads"
+UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-VARIANT_LABELS = {
-    "data_science": "Data Science",
-    "quant": "Quant Research",
-    "bi_sc": "BI / Supply Chain",
-    "research": "Research",
-    "full": "Full CV",
-}
-
-VARIANT_HINTS = {
-    "quant": ["quant", "quantitative", "trading", "portfolio", "alpha", "risk", "derivatives", "research"],
-    "research": ["research", "publication", "paper", "phd", "literature", "experiment", "academic"],
-    "bi_sc": ["business intelligence", "supply chain", "operations", "forecast", "inventory", "power bi", "tableau"],
-    "data_science": ["data science", "machine learning", "analytics", "model", "python", "sql", "experiment"],
-    "full": ["leadership", "stakeholder", "cross-functional", "strategy", "delivery", "generalist"],
-}
+# Variant labels and hints moved to `app.constants`.
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> tuple[str, int]:
@@ -101,25 +88,28 @@ def _select_reference_variant(target_role: str, cv_text: str) -> tuple[str, dict
     return best_variant, scores
 
 
-def _load_reference_template(variant: str) -> str:
-    template_path = REPO_ROOT / CV_FILES.get(variant, CV_FILES["data_science"])
-    return template_path.read_text()
-
-
 @router.post("/customize")
 async def customize(req: CustomizeRequest):
-    latex = await customize_cv(req.variant, req.job_description)
-    score = score_match(latex, req.job_description)
-    return {"latex": latex, "match": score}
+    if not req.cv_text.strip():
+        raise HTTPException(status_code=400, detail="CV text cannot be empty")
+    if not req.job_description.strip():
+        raise HTTPException(status_code=400, detail="Job description cannot be empty")
+
+    tailored = await customize_cv(req.cv_text, req.job_description, req.variant)
+    score = score_match(req.cv_text, req.job_description)
+    return {"text": tailored, "match": score}
 
 @router.get("/variants")
 async def list_variants():
-    return list(CV_FILES.keys())
+    return list(VARIANT_LABELS.keys())
 
 @router.post("/score")
 async def score_existing(req: CustomizeRequest):
-    tex = (REPO_ROOT / CV_FILES.get(req.variant, CV_FILES["data_science"])).read_text()
-    return score_match(tex, req.job_description)
+    if not req.cv_text.strip():
+        raise HTTPException(status_code=400, detail="CV text cannot be empty")
+    if not req.job_description.strip():
+        raise HTTPException(status_code=400, detail="Job description cannot be empty")
+    return score_match(req.cv_text, req.job_description)
 
 @router.post("/score-text")
 async def score_from_text(req: ScoreTextRequest):

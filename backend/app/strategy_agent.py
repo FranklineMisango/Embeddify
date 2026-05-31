@@ -10,10 +10,9 @@ from app.llm import get_client, MODEL_MAP
 from app.config import settings
 from app.routers.cv import (
     _select_reference_variant,
-    _load_reference_template,
     _truncate,
-    VARIANT_LABELS,
 )
+from app.constants import VARIANT_LABELS
 from app.routers.job_search import search_google_jobs
 
 

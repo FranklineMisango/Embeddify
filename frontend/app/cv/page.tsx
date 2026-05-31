@@ -2,20 +2,26 @@
 import { useState } from "react";
 import { Download, Sparkles, FileText } from "lucide-react";
 import axios from "axios";
+import { useCvProfile } from "@/components/CvProvider";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const VARIANTS = ["data_science", "quant", "bi_sc", "research", "full"];
+// Variants are now a style hint only; use a fixed default
 
 export default function CVBuilderPage() {
+  const { profile, hydrated } = useCvProfile();
   const [jd, setJd] = useState("");
-  const [variant, setVariant] = useState("data_science");
+  const variant = "data_science";
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
   const customize = async () => {
+    if (!profile?.text) {
+      return;
+    }
+
     setLoading(true);
     try {
-      const r = await axios.post(`${API}/cv/customize`, { variant, job_description: jd });
+      const r = await axios.post(`${API}/cv/customize`, { variant, cv_text: profile.text, job_description: jd });
       setResult(r.data);
     } catch (error) {
       console.error(error);
@@ -24,37 +30,40 @@ export default function CVBuilderPage() {
   };
 
   const download = () => {
-    if (!result?.latex) return;
-    const blob = new Blob([result.latex], { type: "text/plain" });
+    if (!result?.text) return;
+    const blob = new Blob([result.text], { type: "text/plain" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `CV_${variant}_tailored.tex`;
+    a.download = `CV_${variant}_tailored.txt`;
     a.click();
   };
+
+  if (hydrated && !profile?.text) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-4xl font-bold text-slate-100 mb-2">AI CV Customizer</h1>
+          <p className="text-slate-400">Upload a CV on the Home tab first. The customizer now works directly from your extracted CV text.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-4xl font-bold text-slate-100 mb-2">AI CV Customizer</h1>
-        <p className="text-slate-400">Tailor your CV to specific job descriptions using AI</p>
+        <p className="text-slate-400">Tailor your uploaded CV to specific job descriptions using AI</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Input Section */}
         <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-8 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">CV Variant</label>
-            <select
-              value={variant}
-              onChange={(e) => setVariant(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors"
-            >
-              {VARIANTS.map((v) => (
-                <option key={v} value={v}>
-                  {v.replace(/_/g, " ").toUpperCase()}
-                </option>
-              ))}
-            </select>
+          {/* CV variant selection removed — customizer uses uploaded CV text and a default style */}
+
+          <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-300">
+            <p className="font-semibold text-slate-100">Source CV</p>
+            <p className="mt-1 text-slate-400">{profile?.filename ?? "No resume loaded"}</p>
           </div>
 
           <div>
@@ -69,7 +78,7 @@ export default function CVBuilderPage() {
 
           <button
             onClick={customize}
-            disabled={loading || !jd}
+            disabled={loading || !jd || !profile?.text}
             className="w-full bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-6 py-3 font-semibold transition-all duration-200 flex items-center justify-center gap-2"
           >
             <Sparkles size={18} />
@@ -89,18 +98,18 @@ export default function CVBuilderPage() {
           ) : result ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-100">Tailored LaTeX Output</h3>
+                <h3 className="text-lg font-semibold text-slate-100">Tailored CV Output</h3>
                 <button
                   onClick={download}
                   className="inline-flex items-center gap-2 text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors"
                 >
                   <Download size={16} />
-                  Download .tex
+                  Download .txt
                 </button>
               </div>
               <div className="bg-slate-900/50 rounded-lg p-4 max-h-96 overflow-y-auto border border-slate-600">
                 <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap break-words">
-                  {result.latex}
+                  {result.text}
                 </pre>
               </div>
               {result.match && (

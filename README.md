@@ -40,7 +40,7 @@ The search page fires automatically on load. DeepSeek reads your full CV, infers
 ### 4 — Generate target-role strategy (LangGraph ReAct agent)
 On the **Documents** page, enter a target role (or let Embeddify infer one from your CV). The system orchestrates a multi-step strategy using **LangGraph**:
 
-1. **Variant Selection** — Scores your CV against reference templates (Data Science, Quant, Research, BI, etc.)
+1. **Style Hint Selection** — Scores your CV against reference templates (Data Science, Quant, Research, BI, etc.)
 2. **Job Market Signal Fetch** — Retrieves live job listings via Google Custom Search to understand market demands
 3. **Strategy Synthesis** — DeepSeek analyzes your CV + market signals and generates:
    - **Focus notes** — 3–7 actionable improvements
@@ -159,7 +159,7 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - **AI persona inference** — DeepSeek reads your full CV and determines your professional identity before searching
 - **Comprehensive JD analysis** — 10+ dimensions: overall match, section scores, matched/missing skills, quick wins, critical gaps, recommendations, interview prep, next steps
 - **LangGraph ReAct target-role strategy agent** — Multi-step agentic orchestration:
-  - Variant selection (CV similarity scoring)
+  - Style hint selection (CV similarity scoring)
   - Live job market signal fetching
   - Evidence-backed strategy synthesis with citations
   - Focus notes, sentiment analysis, actionable next steps

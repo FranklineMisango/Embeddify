@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db import get_db
@@ -66,12 +66,11 @@ async def update_status(job_id: int, body: StatusUpdate, db: AsyncSession = Depe
     return {"ok": True}
 
 @router.post("/{job_id}/match")
-async def match_job(job_id: int, variant: str = "data_science", db: AsyncSession = Depends(get_db)):
-    from pathlib import Path
-    from app.cv_builder.customizer import CV_FILES, REPO_ROOT
+async def match_job(job_id: int, cv_text: str = "", db: AsyncSession = Depends(get_db)):
     job = await db.get(Job, job_id)
-    tex = (REPO_ROOT / CV_FILES.get(variant, CV_FILES["data_science"])).read_text()
-    result = score_match(tex, job.description)
+    if not cv_text.strip():
+        raise HTTPException(status_code=400, detail="cv_text is required")
+    result = score_match(cv_text, job.description)
     job.match_score = result["overall"]
     job.match_breakdown = result
     await db.commit()

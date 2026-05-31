@@ -1,32 +1,24 @@
-"""Tailor a CV LaTeX file to a specific job description using DeepSeek."""
-import os
-import pathlib
+"""Tailor a CV text to a specific job description using DeepSeek."""
 from app.llm import chat
 
-CV_FILES = {
-    "data_science": "Data_Science_Machine_Learning/Frankline_Oyolo_2026_Resume.tex",
-    "quant": "Quant_Researcher/Frankline_Oyolo_QRD_2025.tex",
-    "bi_sc": "Business_Intelligence_Supply_Chain/Frankline_Oyolo_BI_SC_2026.tex",
-    "research": "Research_Roles/Frankline_Oyolo_Research_Resume.tex",
-    "full": "Bigger_CV_Education/Frankline_Oyolo_2026_CV.tex",
-}
+from app.constants import VARIANT_LABELS
 
-REPO_ROOT = pathlib.Path(__file__).parents[4]  # workspace root
+SYSTEM_PROMPT = """You are an expert CV writer.
+Given a CV and a job description, rewrite the CV to better match the role while keeping the facts accurate.
+Rewrite only the content that needs to change, preserve the candidate's experience, and return only the tailored CV text.
+Do not use LaTeX formatting unless it already appears in the source CV. Return plain text or markdown only, with no explanation."""
 
-SYSTEM_PROMPT = """You are an expert CV writer and LaTeX engineer.
-Given a LaTeX CV and a job description, rewrite ONLY the bullet points and summary 
-to better match the job — keep all LaTeX commands, structure, and formatting intact.
-Emphasize relevant skills, reorder bullet points by relevance, and inject keywords 
-from the job description naturally. Return ONLY the complete modified LaTeX, no explanation."""
 
-async def customize_cv(variant: str, job_description: str) -> str:
-    tex_path = REPO_ROOT / CV_FILES.get(variant, CV_FILES["data_science"])
-    latex = tex_path.read_text()
-    user_prompt = f"""JOB DESCRIPTION:
+async def customize_cv(cv_text: str, job_description: str, variant: str = "data_science") -> str:
+    style = VARIANT_LABELS.get(variant, VARIANT_LABELS["data_science"])
+    user_prompt = f"""TARGET STYLE:
+{style}
+
+JOB DESCRIPTION:
 {job_description}
 
-CURRENT CV (LaTeX):
-{latex}
+CURRENT CV:
+{cv_text}
 
-Return the tailored LaTeX CV."""
+Return the tailored CV text."""
     return await chat(SYSTEM_PROMPT, user_prompt)
