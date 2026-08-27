@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import httpx
 import json
 from typing import Optional
+from urllib.parse import unquote
 from app.config import settings
 from app.llm import chat
 from bs4 import BeautifulSoup
@@ -15,6 +16,7 @@ class JobSearchRequest(BaseModel):
     location: str
     level: str  # "internship", "entry", "mid", "senior", "lead"
     job_title: Optional[str] = None
+    target_role: Optional[str] = None
     cv_text: Optional[str] = None  # Full CV text for AI persona analysis
 
 class JobAnalysisRequest(BaseModel):
@@ -22,6 +24,9 @@ class JobAnalysisRequest(BaseModel):
     job_description: str
     job_title: str
     company: str
+
+class FetchRequest(BaseModel):
+    url: str
 
 class JobMatch(BaseModel):
     title: str
@@ -122,12 +127,15 @@ async def search_google_jobs(query: str, location: str, num_results: int = 20) -
 
                     print(f"[DEBUG] Result {idx}: {title[:60]} | URL: {url}")
 
-                    if is_valid_job_posting(title, snippet, url):
+                    if is_valid_job_posting(title, snippet, url, location):
+                        cleaned_title = clean_job_title(title)
+                        company = extract_company(title, url)
                         job = {
-                            "title": clean_job_title(title),
-                            "company": extract_company(title, url),
+                            "title": cleaned_title,
+                            "company": company,
                             "location": location,
                             "url": url,
+                            "listing_label": f"{company} is hiring {cleaned_title}",
                             "snippet": snippet,
                             "posted_date": None,
                         }
@@ -148,56 +156,23 @@ async def search_google_jobs(query: str, location: str, num_results: int = 20) -
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Job search failed: {str(e)}")
 
-def is_valid_job_posting(title: str, snippet: str, url: str) -> bool:
-    """Filter out only obvious non-job sources - lenient version"""
-    title_lower = title.lower()
-    url_lower = url.lower()
-    
-    # Only exclude obvious non-job sources
-    exclude_domains = [
-        "reddit.com",
-        "twitter.com",
-        "x.com",
-        "facebook.com",
-        "instagram.com",
-        "tiktok.com",
-        "youtube.com",
-        "quora.com",
-        "wikipedia.org",
-    ]
-    
-    for domain in exclude_domains:
-        if domain in url_lower:
-            return False
-    
-    # Exclude obvious search result pages
-    exclude_keywords = [
-        "search results",
-        "browse all jobs",
-        "view all jobs",
-        "see all jobs",
-    ]
-    
-    for keyword in exclude_keywords:
-        if keyword in title_lower:
-            return False
-    
-    # Exclude non-job URLs (search pages, filters)
-    if any(x in url_lower for x in ["/search?", "/results?", "/browse?", "/filter?"]):
-        return False
-    
-    # Must have some job-related indicator
-    job_keywords = ["job", "position", "role", "opening", "hire", "recruit", "career", "opportunity", "engineer", "developer", "analyst", "manager", "specialist", "coordinator", "associate", "intern", "vacancy", "recruitment", "careers", "opportunities"]
-    has_job_keyword = any(keyword in title_lower for keyword in job_keywords)
-    
-    if not has_job_keyword:
-        return False
-    
-    # Minimum title length
-    if len(title) < 5:
-        return False
-    
-    return True
+def is_valid_job_posting(title: str, snippet: str, url: str, location: str = "") -> bool:
+    """Keep every result unless it has no evidence of the requested location."""
+    requested_location = location.strip().lower()
+    if not requested_location or requested_location in {"worldwide", "anywhere", "remote or worldwide"}:
+        return True
+
+    location_aliases = {
+        "hong kong sar": ["hong kong", "hongkong", "hk"],
+        "hong kong": ["hong kong", "hongkong", "hk"],
+        "new york": ["new york", "new york city", "nyc"],
+        "san francisco": ["san francisco", "sf", "bay area"],
+        "united kingdom": ["united kingdom", "uk", "london", "england"],
+        "united states": ["united states", "usa", "us"],
+    }
+    aliases = location_aliases.get(requested_location, [requested_location])
+    searchable_text = unquote(f"{title} {snippet} {url}").lower()
+    return any(alias in searchable_text for alias in aliases)
 
 def clean_job_title(title: str) -> str:
     """Clean up job title by removing extra text"""
@@ -218,6 +193,9 @@ def clean_job_title(title: str) -> str:
     for suffix in suffixes:
         if suffix in title:
             title = title.replace(suffix, "").strip()
+
+    title = re.sub(r"^\s*\d+\+?\s+", "", title)
+    title = re.sub(r"\s*\([^)]*\b(?:open|available)\s+roles?[^)]*\)", "", title, flags=re.IGNORECASE)
     
     return title
 
@@ -253,7 +231,40 @@ def extract_company(title: str, url: str = "") -> str:
     
     return "Unknown"
 
-async def infer_candidate_persona(cv_text: str, skills: list[str], level: str) -> dict:
+def _stabilize_persona(persona: dict, cv_text: str, resume_label: str = "") -> dict:
+    """Prevent finance-oriented labels without finance evidence from steering search."""
+    combined = f"{resume_label} {cv_text}".lower()
+    persona_text = " ".join([
+        str(persona.get("primary_persona", "")),
+        str(persona.get("role_query", "")),
+        " ".join(str(title) for title in persona.get("top_job_titles", [])),
+    ]).lower()
+    finance_evidence = [
+        "quantitative finance", "quant researcher", "trading", "portfolio",
+        "derivatives", "options pricing", "market making", "bloomberg",
+        "hedge fund", "asset management", "risk model",
+    ]
+    software_evidence = [
+        "software engineer", "software developer", "backend", "frontend",
+        "full stack", "web application", "microservices", "api development",
+        "react", "typescript", "java", "c++",
+    ]
+
+    is_quant_label = bool(re.search(r"\bquant(?:itative)?\b|financial analyst|trader", persona_text))
+    has_finance_evidence = any(term in combined for term in finance_evidence)
+    has_software_evidence = any(term in combined for term in software_evidence)
+    if is_quant_label and has_software_evidence and not has_finance_evidence:
+        persona.update({
+            "primary_persona": "software engineer",
+            "top_job_titles": ["software engineer", "backend engineer", "full stack engineer"],
+            "industry": "technology",
+            "role_query": "software engineer",
+            "reasoning": "Software-engineering experience is present, but the CV contains no evidence of quantitative finance work.",
+        })
+    return persona
+
+
+async def infer_candidate_persona(cv_text: str, skills: list[str], level: str, resume_label: str = "", target_role: str = "") -> dict:
     """Use AI to deeply analyze the CV and infer the candidate's ideal job persona."""
     
     level_labels = {
@@ -278,13 +289,15 @@ async def infer_candidate_persona(cv_text: str, skills: list[str], level: str) -
     prompt = f"""You are an expert career advisor and recruiter. Analyze this CV thoroughly and determine the candidate's professional identity.
 
 CANDIDATE EXPERIENCE LEVEL: {level_label}
+RESUME LABEL: {resume_label or "not provided"}
+USER TARGET ROLE: {target_role or "not specified; infer from the CV"}
 EXTRACTED SKILLS: {', '.join(skills[:20])}
 
 FULL CV TEXT:
 {cv_text[:4000]}
 
 Based on the CV, determine:
-1. What is this person's PRIMARY professional identity / strongest persona? (e.g. "quantitative researcher", "data scientist", "software engineer", "financial analyst")
+1. What is this person's PRIMARY professional identity / strongest persona? Infer it primarily from employment titles, responsibilities, and shipped work. Do not infer quantitative finance from generic programming, mathematics, statistics, algorithms, or optimization alone; require explicit trading, portfolio, derivatives, pricing, or financial-market evidence.
 2. What are the TOP 3 most specific job titles that would be a perfect match?
 3. What industry/domain are they strongest in?
 4. What is the best 2-4 word job role description (NO level/seniority words, NO location) to search for this person? e.g. "quantitative researcher", "data scientist", "software engineer"
@@ -306,6 +319,15 @@ Return ONLY valid JSON, no markdown."""
         if cleaned.startswith("```"):
             cleaned = cleaned.split("```json")[1].split("```")[0].strip() if "```json" in cleaned else cleaned.split("```")[1].split("```")[0].strip()
         persona = json.loads(cleaned)
+        persona = _stabilize_persona(persona, cv_text, resume_label)
+
+        if target_role.strip():
+            persona.update({
+                "primary_persona": target_role.strip(),
+                "top_job_titles": [target_role.strip()],
+                "role_query": target_role.strip(),
+                "reasoning": "User-provided target role override.",
+            })
 
         # Always build the final search query ourselves so the level term is guaranteed
         role_query = persona.get("role_query") or persona.get("primary_persona", " ".join(skills[:2]))
@@ -386,15 +408,21 @@ async def search_and_rank_jobs(req: JobSearchRequest):
         # Step 1: Use AI to infer the candidate's persona from the full CV
         if req.cv_text and len(req.cv_text.strip()) > 100:
             print("[DEBUG] Inferring candidate persona from full CV text...")
-            persona = await infer_candidate_persona(req.cv_text, req.skills, req.level)
+            persona = await infer_candidate_persona(
+                req.cv_text,
+                req.skills,
+                req.level,
+                req.job_title or "",
+                req.target_role or "",
+            )
             search_query = persona.get("search_query", "")
             primary_persona = persona.get("primary_persona", "")
             top_titles = persona.get("top_job_titles", [])
             print(f"[DEBUG] Persona: {primary_persona} | Search: {search_query}")
         else:
             # Fallback to skills-based query
-            search_query = build_search_query(req.skills, req.level, req.job_title)
-            primary_persona = req.job_title or " ".join(req.skills[:2])
+            search_query = build_search_query(req.skills, req.level, req.target_role or req.job_title)
+            primary_persona = req.target_role or req.job_title or " ".join(req.skills[:2])
             top_titles = []
             print(f"[DEBUG] No CV text, using skills-based query: {search_query}")
 
@@ -458,13 +486,21 @@ Include ALL {len(jobs)} jobs in the ranking. Return ONLY valid JSON."""
 
             if "ranking" in ranking_data:
                 ranked_jobs = []
+                ranked_indices = set()
                 for rank_item in ranking_data["ranking"]:
                     job_idx = rank_item.get("job_index", 0)
-                    if 0 <= job_idx < len(jobs):
+                    if 0 <= job_idx < len(jobs) and job_idx not in ranked_indices:
+                        ranked_indices.add(job_idx)
                         job = jobs[job_idx].copy()
                         job["ai_match_score"] = rank_item.get("match_score", 0)
                         job["ai_reason"] = rank_item.get("reason", "")
                         ranked_jobs.append(job)
+                for job_idx, job in enumerate(jobs):
+                    if job_idx not in ranked_indices:
+                        unranked_job = job.copy()
+                        unranked_job["ai_match_score"] = 0
+                        unranked_job["ai_reason"] = "This listing was not ranked by the AI response."
+                        ranked_jobs.append(unranked_job)
                 jobs = ranked_jobs
                 print(f"[DEBUG] AI ranked {len(jobs)} jobs")
         except Exception as e:
@@ -482,13 +518,10 @@ Include ALL {len(jobs)} jobs in the ranking. Return ONLY valid JSON."""
         raise HTTPException(status_code=500, detail=f"Job search failed: {str(e)}")
 
 @router.post("/fetch-job-description")
-async def fetch_job_description(req: BaseModel):
+async def fetch_job_description(req: FetchRequest):
     """Fetch full job description from URL"""
-    class FetchRequest(BaseModel):
-        url: str
-    
     try:
-        url = req.url if hasattr(req, 'url') else req.__dict__.get('url')
+        url = req.url.strip()
         if not url:
             raise HTTPException(status_code=400, detail="URL is required")
         

@@ -1,0 +1,18 @@
+embeddify.misango.me {
+    encode gzip
+
+    # ── API routes → FastAPI backend (port 8000) ──────────────────────────
+    @api {
+        path /cv/* /jobs/* /job-search/* /graphql
+    }
+    reverse_proxy @api embeddify-backend:8000
+
+    # ── Health check endpoint ────────────────────────────────────────────
+    @health {
+        path /health
+    }
+    reverse_proxy @health embeddify-backend:8000
+
+    # ── Everything else → Next.js frontend (port 3000) ───────────────────
+    reverse_proxy embeddify-frontend:3000
+}

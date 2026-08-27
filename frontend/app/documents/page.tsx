@@ -7,6 +7,16 @@ import { useCvProfile } from "@/components/CvProvider";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const displayInsight = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    const preferred = item.name ?? item.description ?? item.skill ?? item.title;
+    if (typeof preferred === "string") return preferred;
+  }
+  return JSON.stringify(value);
+};
+
 const SENIORITY_OPTIONS = [
   { value: "any", label: "Any level" },
   { value: "internship", label: "Internship" },
@@ -253,9 +263,9 @@ export default function DocumentsPage() {
             <section>
               <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">Extracted skills</p>
               <div className="flex flex-wrap gap-2">
-                {currentSkills.length > 0 ? currentSkills.slice(0, 16).map((skill) => (
-                  <span key={skill} className="rounded-full border border-brand-500/20 bg-brand-500/10 px-3 py-1 text-xs text-brand-200">
-                    {skill}
+                {currentSkills.length > 0 ? currentSkills.slice(0, 16).map((skill, index) => (
+                  <span key={index} className="rounded-full border border-brand-500/20 bg-brand-500/10 px-3 py-1 text-xs text-brand-200">
+                    {displayInsight(skill)}
                   </span>
                 )) : (
                   <span className="text-sm text-slate-500">No skills extracted yet.</span>
@@ -269,7 +279,7 @@ export default function DocumentsPage() {
                 {currentHighlights.length > 0 ? currentHighlights.slice(0, 4).map((item, index) => (
                   <li key={`${item}-${index}`} className="flex gap-2">
                     <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-green-400" />
-                    <span>{item}</span>
+                    <span>{displayInsight(item)}</span>
                   </li>
                 )) : (
                   <li className="text-slate-500">No extracted highlights yet.</li>
@@ -282,7 +292,7 @@ export default function DocumentsPage() {
               <div className="flex flex-wrap gap-2">
                 {currentSections.length > 0 ? currentSections.map((section) => (
                   <span key={section} className="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-300">
-                    {section}
+                    {displayInsight(section)}
                   </span>
                 )) : (
                   <span className="text-sm text-slate-500">No sections detected yet.</span>
@@ -343,7 +353,7 @@ export default function DocumentsPage() {
                   {analysis.focusNotes.map((note, index) => (
                     <li key={`${note}-${index}`} className="flex gap-2 text-sm text-slate-300">
                       <span className="text-brand-400 mt-1">→</span>
-                      <span>{note}</span>
+                      <span>{displayInsight(note)}</span>
                     </li>
                   ))}
                 </ul>
@@ -360,7 +370,7 @@ export default function DocumentsPage() {
                   <div className="flex flex-wrap gap-2">
                     {analysis.similarResumeSignals.map((signal, index) => (
                       <span key={`${signal}-${index}`} className="rounded-full bg-brand-500/10 px-3 py-1 text-xs text-brand-200">
-                        {signal}
+                        {displayInsight(signal)}
                       </span>
                     ))}
                   </div>
@@ -372,7 +382,7 @@ export default function DocumentsPage() {
                     {analysis.jobRequirements.map((requirement, index) => (
                       <li key={`${requirement}-${index}`} className="flex gap-2">
                         <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-green-400" />
-                        <span>{requirement}</span>
+                        <span>{displayInsight(requirement)}</span>
                       </li>
                     ))}
                   </ul>
@@ -405,7 +415,7 @@ export default function DocumentsPage() {
                     {analysis.actionPlan.map((step, index) => (
                       <li key={`${step}-${index}`} className="flex gap-3">
                         <span className="font-semibold text-brand-400">{index + 1}.</span>
-                        <span>{step}</span>
+                        <span>{displayInsight(step)}</span>
                       </li>
                     ))}
                   </ol>
@@ -417,7 +427,7 @@ export default function DocumentsPage() {
                     {analysis.caveats.map((item, index) => (
                       <li key={`${item}-${index}`} className="flex gap-2">
                         <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-400" />
-                        <span>{item}</span>
+                        <span>{displayInsight(item)}</span>
                       </li>
                     ))}
                   </ul>

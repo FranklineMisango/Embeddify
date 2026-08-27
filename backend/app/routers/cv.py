@@ -11,6 +11,7 @@ from PyPDF2 import PdfReader
 
 from app.cv_builder.customizer import customize_cv
 from app.nlp.matcher import score_match
+from app.llm import chat
 from app.routers.job_search import search_google_jobs
 from app.constants import VARIANT_LABELS, VARIANT_HINTS
 
@@ -68,6 +69,21 @@ def _normalize_text(text: str) -> str:
 def _truncate(text: str, limit: int = 2400) -> str:
     cleaned = _normalize_text(text)
     return cleaned[:limit]
+
+
+def _insight_to_text(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        name = value.get("name") or value.get("title") or value.get("skill")
+        description = value.get("description") or value.get("details") or value.get("outcome")
+        if isinstance(name, str) and isinstance(description, str) and description.strip() not in name:
+            return f"{name}: {description}"
+        if isinstance(name, str):
+            return name
+        if isinstance(description, str):
+            return description
+    return str(value)
 
 
 def _select_reference_variant(target_role: str, cv_text: str) -> tuple[str, dict[str, int]]:
@@ -131,24 +147,24 @@ IMPORTANT: Be thorough and extract ALL relevant information, not just surface-le
 Return ONLY a valid JSON object with these exact keys:
 {
   "keySkills": [array of technical and professional skills - extract ALL mentioned skills, max 25],
-  "experienceHighlights": [array of key achievements, responsibilities, and accomplishments - extract ALL significant bullet points and achievements, max 20],
+    "experienceHighlights": [array of complete achievement and responsibility statements - extract ALL significant bullet points, max 30],
   "sectionsDetected": [array of main CV sections found],
   "publications": [array of publications/papers/research - extract ALL if any, max 15],
-  "technicalProjects": [array of technical projects, side projects, or notable implementations - extract ALL if any, max 15],
+    "technicalProjects": [array of detailed project records with name, purpose, technologies, implementation, and outcome - extract ALL if any, max 20],
   "researchAreas": [array of research areas, domains, or specializations - extract ALL if any, max 10],
   "certifications": [array of certifications, licenses, or credentials - extract ALL if any, max 10],
-  "awards": [array of awards, honors, or recognitions - extract ALL if any, max 10],
+    "awards": [array of awards, honors, or recognitions - extract ALL if any, max 10],
   "languages": [array of programming languages and natural languages - extract ALL if any, max 15]
 }
 
 EXTRACTION GUIDELINES:
-1. For keySkills: Extract every technical skill, programming language, tool, framework, methodology, and domain expertise mentioned. Include both hard skills and soft skills.
-2. For experienceHighlights: Extract complete achievement statements, responsibilities, and quantified results. Include all significant accomplishments from all roles.
-3. For publications: Extract all papers, conferences, journals, research outputs mentioned with full citations if available.
-4. For technicalProjects: Extract all projects, implementations, systems built, or notable technical work. Include project names, technologies used, and outcomes.
-5. For researchAreas: Extract research domains, specializations, focus areas, or academic interests.
-6. For certifications: Extract any certifications, licenses, credentials, or professional qualifications.
-7. For awards: Extract awards, honors, scholarships, recognitions, or special selections.
+1. For keySkills: Extract every technical skill, programming language, tool, framework, methodology, and domain expertise mentioned. Do not omit less prominent technologies.
+2. For experienceHighlights: Preserve the subject, action, technology, scale, result, and metrics from every meaningful bullet. Do not summarize an entire role into one sentence.
+3. For publications: Extract full titles, authors, venues, dates, links, and contributions when present.
+4. For technicalProjects: Return objects with exactly {"name": "...", "description": "..."}; description must include purpose, technologies, implementation details, and measurable outcome when available. Never return a project name alone.
+5. For researchAreas: Extract research domains, specializations, focus areas, and supporting evidence when present.
+6. For certifications: Include certification name, issuer, and date or credential ID when present.
+7. For awards: Include award name, organization, result, amount, and date when present.
 8. For languages: Extract both programming languages and natural languages mentioned.
 9. For sectionsDetected: Identify all major sections in the CV.
 
@@ -177,15 +193,23 @@ Return the JSON object with comprehensive extracted information."""
             if key not in insights:
                 insights[key] = []
         
-        insights["keySkills"] = insights.get("keySkills", [])[:25]
-        insights["experienceHighlights"] = insights.get("experienceHighlights", [])[:20]
-        insights["publications"] = insights.get("publications", [])[:15]
-        insights["technicalProjects"] = insights.get("technicalProjects", [])[:15]
-        insights["researchAreas"] = insights.get("researchAreas", [])[:10]
-        insights["certifications"] = insights.get("certifications", [])[:10]
-        insights["awards"] = insights.get("awards", [])[:10]
-        insights["languages"] = insights.get("languages", [])[:15]
-        insights["sectionsDetected"] = insights.get("sectionsDetected", [])
+        insight_limits = {
+            "keySkills": 25,
+            "experienceHighlights": 30,
+            "publications": 15,
+            "technicalProjects": 20,
+            "researchAreas": 10,
+            "certifications": 10,
+            "awards": 10,
+            "languages": 15,
+            "sectionsDetected": None,
+        }
+        for key, limit in insight_limits.items():
+            values = insights.get(key, [])
+            if not isinstance(values, list):
+                values = [values]
+            values = [_insight_to_text(value) for value in values]
+            insights[key] = values if limit is None else values[:limit]
         
         return insights
     except json.JSONDecodeError as e:
@@ -263,23 +287,31 @@ async def upload_cv_stream(file: UploadFile = File(...)):
                 yield await send_progress("error", "PDF did not contain readable text. If this is a scanned document, OCR is required.", 0)
                 return
             
-            # Stage 5: Analyzing with AI
+            # The AI prompt is defined below after the progress event.
             yield await send_progress("analyzing", "Analyzing CV with AI...", 65)
-            from app.llm import chat
+            system_prompt = """You are an expert CV analyzer. Extract complete, evidence-based information from the CV.
+
+Return ONLY valid JSON with keys: keySkills, experienceHighlights, sectionsDetected, publications, technicalProjects, researchAreas, certifications, awards, languages.
+
+Preserve every meaningful experience bullet with technologies, actions, scale, outcomes, and metrics. For technicalProjects, return objects with exactly {"name": "...", "description": "..."}; include purpose, technologies, implementation details, and outcomes. Never invent details or reduce a project to only its name."""
+            '''
+                2. For experienceHighlights: Preserve the subject, action, technology, scale, result, and metrics from every meaningful bullet. Do not summarize an entire role into one sentence.
             
-            system_prompt = """You are an expert CV analyzer. Your task is to deeply analyze a CV and extract comprehensive structured information.
+                3. For publications: Extract full titles, authors, venues, dates, links, and contributions when present.
 
-IMPORTANT: Be thorough and extract ALL relevant information, not just surface-level content.
+                4. For technicalProjects: Return objects with exactly {"name": "...", "description": "..."}; description must include purpose, technologies, implementation details, and measurable outcome when available. Never return a project name alone.
 
-Return ONLY a valid JSON object with these exact keys:
+                5. For researchAreas: Extract research domains, specializations, focus areas, and supporting evidence when present.
 {
-  "keySkills": [array of technical and professional skills - extract ALL mentioned skills, max 25],
+                6. For certifications: Include certification name, issuer, and date or credential ID when present.
   "experienceHighlights": [array of key achievements, responsibilities, and accomplishments - extract ALL significant bullet points and achievements, max 20],
-  "sectionsDetected": [array of main CV sections found],
+                7. For awards: Include award name, organization, result, amount, and date when present.
   "publications": [array of publications/papers/research - extract ALL if any, max 15],
-  "technicalProjects": [array of technical projects, side projects, or notable implementations - extract ALL if any, max 15],
+                8. For languages: Extract both programming languages and natural languages mentioned.
   "researchAreas": [array of research areas, domains, or specializations - extract ALL if any, max 10],
-  "certifications": [array of certifications, licenses, or credentials - extract ALL if any, max 10],
+                9. For sectionsDetected: Identify all major CV sections.
+                10. Never invent details. If a field is not present, omit it or use an empty array.
+                10. Never invent details. If a field is not present, omit it or use an empty array.
   "awards": [array of awards, honors, or recognitions - extract ALL if any, max 10],
   "languages": [array of programming languages and natural languages - extract ALL if any, max 15]
 }
@@ -296,6 +328,7 @@ EXTRACTION GUIDELINES:
 9. For sectionsDetected: Identify all major sections in the CV.
 
 Return ONLY valid JSON, no markdown formatting, no code blocks, no explanations."""
+            '''
 
             user_prompt = f"""Analyze this CV thoroughly and extract all relevant information:
 
@@ -370,7 +403,7 @@ Return the JSON object with comprehensive extracted information."""
 
 @router.post("/upload")
 async def upload_cv(file: UploadFile = File(...)):
-    """Upload, store, and extract text from a CV PDF."""
+    """Upload, store, and extract text from a CV PDF"""
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     

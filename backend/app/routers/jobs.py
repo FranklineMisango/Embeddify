@@ -6,6 +6,7 @@ from app.models import Job
 from app.scraper.linkedin import scrape_linkedin
 from app.scraper.indeed import scrape_indeed
 from app.nlp.matcher import score_match
+from app.routers.job_search import is_valid_job_posting
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -26,6 +27,11 @@ async def scrape_jobs(req: ScrapeRequest, db: AsyncSession = Depends(get_db)):
         all_jobs += await scrape_linkedin(req.query, req.location, req.limit)
     if "indeed" in req.sources:
         all_jobs += await scrape_indeed(req.query, req.location, req.limit)
+
+    all_jobs = [
+        job for job in all_jobs
+        if is_valid_job_posting(job.get("title", ""), job.get("description", ""), job.get("url", ""), req.location)
+    ]
 
     saved = []
     for j in all_jobs:

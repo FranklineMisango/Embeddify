@@ -13,6 +13,16 @@ const API_FALLBACK = API.includes("localhost")
     ? API.replace("127.0.0.1", "localhost")
     : null;
 
+const displayInsight = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    const preferred = item.name ?? item.description ?? item.skill ?? item.title;
+    if (typeof preferred === "string") return preferred;
+  }
+  return JSON.stringify(value);
+};
+
 const formatUploadError = (error: unknown) => {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail;
@@ -294,9 +304,9 @@ export default function Home() {
                 <p className="text-sm font-semibold">Key Skills</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {profile.insights.keySkills.length > 0 ? profile.insights.keySkills.map((skill) => (
-                  <span key={skill} className="rounded-full bg-brand-500/15 px-3 py-1 text-xs text-brand-200">
-                    {skill}
+                {profile.insights.keySkills.length > 0 ? profile.insights.keySkills.map((skill, index) => (
+                  <span key={index} className="rounded-full bg-brand-500/15 px-3 py-1 text-xs text-brand-200">
+                    {displayInsight(skill)}
                   </span>
                 )) : (
                   <p className="text-sm text-slate-400">No clear skills detected yet.</p>
@@ -310,7 +320,7 @@ export default function Home() {
               </div>
               <ul className="space-y-2 text-sm text-slate-300">
                 {profile.insights.experienceHighlights.length > 0 ? profile.insights.experienceHighlights.slice(0, 4).map((line, index) => (
-                  <li key={`${line}-${index}`} className="line-clamp-2">{line}</li>
+                  <li key={index} className="line-clamp-2">{displayInsight(line)}</li>
                 )) : (
                   <li className="text-slate-400">No obvious highlight lines found yet.</li>
                 )}
@@ -323,7 +333,7 @@ export default function Home() {
               </div>
               <ul className="space-y-2 text-sm text-slate-300">
                 {profile.insights.publications.length > 0 ? profile.insights.publications.slice(0, 4).map((line, index) => (
-                  <li key={`${line}-${index}`} className="line-clamp-2">{line}</li>
+                  <li key={index} className="line-clamp-2">{displayInsight(line)}</li>
                 )) : (
                   <li className="text-slate-400">No publication lines detected yet.</li>
                 )}
@@ -342,9 +352,9 @@ export default function Home() {
                 </div>
                 <ul className="space-y-2 text-sm text-slate-300">
                   {profile.insights.technicalProjects.slice(0, 5).map((project, index) => (
-                    <li key={`${project}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                    <li key={index} className="line-clamp-2 flex items-start gap-2">
                       <span className="text-blue-400 mt-1">→</span>
-                      <span>{project}</span>
+                      <span>{displayInsight(project)}</span>
                     </li>
                   ))}
                 </ul>
@@ -359,9 +369,9 @@ export default function Home() {
                 </div>
                 <ul className="space-y-2 text-sm text-slate-300">
                   {profile.insights.awards.slice(0, 5).map((award, index) => (
-                    <li key={`${award}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                    <li key={index} className="line-clamp-2 flex items-start gap-2">
                       <span className="text-yellow-400 mt-1">★</span>
-                      <span>{award}</span>
+                      <span>{displayInsight(award)}</span>
                     </li>
                   ))}
                 </ul>
@@ -376,9 +386,9 @@ export default function Home() {
                 </div>
                 <ul className="space-y-2 text-sm text-slate-300">
                   {profile.insights.certifications.slice(0, 5).map((cert, index) => (
-                    <li key={`${cert}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                    <li key={index} className="line-clamp-2 flex items-start gap-2">
                       <span className="text-green-400 mt-1">✓</span>
-                      <span>{cert}</span>
+                      <span>{displayInsight(cert)}</span>
                     </li>
                   ))}
                 </ul>
@@ -393,9 +403,9 @@ export default function Home() {
                 </div>
                 <ul className="space-y-2 text-sm text-slate-300">
                   {profile.insights.researchAreas.slice(0, 5).map((area, index) => (
-                    <li key={`${area}-${index}`} className="line-clamp-2 flex items-start gap-2">
+                    <li key={index} className="line-clamp-2 flex items-start gap-2">
                       <span className="text-purple-400 mt-1">◆</span>
-                      <span>{area}</span>
+                      <span>{displayInsight(area)}</span>
                     </li>
                   ))}
                 </ul>
@@ -409,9 +419,9 @@ export default function Home() {
                   <p className="text-sm font-semibold">Languages & Tools</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {profile.insights.languages.slice(0, 10).map((lang) => (
-                    <span key={lang} className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200">
-                      {lang}
+                  {profile.insights.languages?.slice(0, 10).map((lang, index) => (
+                    <span key={index} className="rounded-full bg-cyan-500/15 px-2 py-1 text-xs text-cyan-200">
+                      {displayInsight(lang)}
                     </span>
                   ))}
                 </div>

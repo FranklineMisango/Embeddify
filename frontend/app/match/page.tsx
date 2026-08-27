@@ -7,6 +7,16 @@ import axios from "axios";
 import { useCvProfile } from "@/components/CvProvider";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+function displayAnalysisValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    const preferred = item.name ?? item.description ?? item.recommendation ?? item.skill;
+    if (typeof preferred === "string") return preferred;
+  }
+  return JSON.stringify(value);
+}
 const API_FALLBACK = API.includes("localhost")
   ? API.replace("localhost", "127.0.0.1")
   : API.includes("127.0.0.1")
@@ -250,9 +260,9 @@ export default function MatchPage() {
                     Matched Skills ({analysis.matchedSkills.length})
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {analysis.matchedSkills.map((skill: string, idx: number) => (
+                    {analysis.matchedSkills.map((skill: unknown, idx: number) => (
                       <span key={idx} className="bg-green-500/15 text-green-200 text-sm px-3 py-1 rounded-full">
-                        {skill}
+                        {displayAnalysisValue(skill)}
                       </span>
                     ))}
                   </div>
@@ -269,7 +279,7 @@ export default function MatchPage() {
                   <div className="space-y-2">
                     {analysis.missingSkills.map((skill: any, idx: number) => (
                       <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                        <p className="text-red-200 font-medium">{typeof skill === 'string' ? skill : skill.skill}</p>
+                        <p className="text-red-200 font-medium">{displayAnalysisValue(skill)}</p>
                         {typeof skill === 'object' && skill.importance && (
                           <p className="text-xs text-red-300 mt-1">Importance: {skill.importance}</p>
                         )}

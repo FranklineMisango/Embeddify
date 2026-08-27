@@ -6,6 +6,9 @@ import CvProvider from "@/components/CvProvider";
 export const metadata: Metadata = {
   title: "Embeddify - AI Job Matching",
   description: "Upload your CV, find matching jobs, and get AI-powered advice",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

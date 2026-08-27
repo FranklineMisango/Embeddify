@@ -15,6 +15,18 @@ const LEVELS = [
   { value: "lead", label: "Lead/Principal" },
 ];
 
+const TARGET_ROLES = ["Software Engineer", "Backend Engineer", "Data Scientist", "DevOps Engineer"];
+
+function displayAnalysisValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const item = value as Record<string, unknown>;
+    const preferred = item.name ?? item.description ?? item.recommendation ?? item.skill;
+    if (typeof preferred === "string") return preferred;
+  }
+  return JSON.stringify(value);
+}
+
 // ─── Comprehensive analysis panel (same as match page) ───────────────────────
 
 function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
@@ -80,8 +92,8 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
             Matched Skills ({analysis.matchedSkills.length})
           </h3>
           <div className="flex flex-wrap gap-2">
-            {analysis.matchedSkills.map((skill: string, idx: number) => (
-              <span key={idx} className="bg-green-500/15 text-green-200 text-sm px-3 py-1 rounded-full">{skill}</span>
+            {analysis.matchedSkills.map((skill: unknown, idx: number) => (
+              <span key={idx} className="bg-green-500/15 text-green-200 text-sm px-3 py-1 rounded-full">{displayAnalysisValue(skill)}</span>
             ))}
           </div>
         </div>
@@ -96,7 +108,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
           <div className="space-y-2">
             {analysis.missingSkills.map((skill: any, idx: number) => (
               <div key={idx} className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                <p className="text-red-200 font-medium">{typeof skill === "string" ? skill : skill.skill}</p>
+                <p className="text-red-200 font-medium">{displayAnalysisValue(skill)}</p>
                 {typeof skill === "object" && skill.importance && (
                   <p className="text-xs text-red-300 mt-1">Importance: {skill.importance}</p>
                 )}
@@ -116,7 +128,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
             {analysis.quickWins.map((win: any, idx: number) => (
               <li key={idx} className="flex gap-2 text-slate-300">
                 <span className="text-yellow-400 mt-1">→</span>
-                <span>{typeof win === "string" ? win : JSON.stringify(win)}</span>
+                <span>{displayAnalysisValue(win)}</span>
               </li>
             ))}
           </ul>
@@ -133,7 +145,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
             {analysis.criticalGaps.map((gap: any, idx: number) => (
               <li key={idx} className="flex gap-2 text-slate-300">
                 <span className="text-orange-400 mt-1">⚠</span>
-                <span>{typeof gap === "string" ? gap : JSON.stringify(gap)}</span>
+                <span>{displayAnalysisValue(gap)}</span>
               </li>
             ))}
           </ul>
@@ -150,7 +162,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
             {analysis.recommendations.map((rec: any, idx: number) => (
               <li key={idx} className="flex gap-2 text-slate-300">
                 <span className="text-blue-400 mt-1">→</span>
-                <span>{typeof rec === "string" ? rec : rec.recommendation || JSON.stringify(rec)}</span>
+                <span>{displayAnalysisValue(rec)}</span>
               </li>
             ))}
           </ul>
@@ -163,7 +175,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {analysis.interviewTopics.map((topic: any, idx: number) => (
               <div key={idx} className="bg-slate-800/30 border border-slate-700 rounded-lg p-3">
-                <p className="text-slate-300 text-sm">{typeof topic === "string" ? topic : JSON.stringify(topic)}</p>
+                <p className="text-slate-300 text-sm">{displayAnalysisValue(topic)}</p>
               </div>
             ))}
           </div>
@@ -177,7 +189,7 @@ function ComprehensiveAnalysis({ analysis }: { analysis: any }) {
             {analysis.nextSteps.map((step: any, idx: number) => (
               <li key={idx} className="flex gap-3 text-slate-300">
                 <span className="font-semibold text-brand-400">{idx + 1}.</span>
-                <span>{typeof step === "string" ? step : JSON.stringify(step)}</span>
+                <span>{displayAnalysisValue(step)}</span>
               </li>
             ))}
           </ol>
@@ -197,6 +209,8 @@ export default function JobSearchPage() {
   const [location, setLocation] = useState("");
   const [level, setLevel] = useState("");
   const [locationInput, setLocationInput] = useState("");
+  const [targetRole, setTargetRole] = useState("");
+  const [targetRoleInput, setTargetRoleInput] = useState("");
 
   // Results
   const [jobs, setJobs] = useState<any[]>([]);
@@ -213,7 +227,7 @@ export default function JobSearchPage() {
   const [fetchingDescription, setFetchingDescription] = useState(false);
 
   // ── Core search function ──────────────────────────────────────────────────
-  const runSearch = useCallback(async (loc: string, lvl: string) => {
+  const runSearch = useCallback(async (loc: string, lvl: string, role: string) => {
     if (!profile) return;
 
     setLoading(true);
@@ -229,6 +243,7 @@ export default function JobSearchPage() {
         location: loc || "worldwide",
         level: lvl || "any",
         job_title: profile.filename,
+        target_role: role.trim() || null,
         cv_text: profile.text,
       });
       setJobs(response.data.jobs || []);
@@ -244,23 +259,23 @@ export default function JobSearchPage() {
   // ── Auto-search only after the user has explicitly configured the search ──
   useEffect(() => {
     if (hydrated && profile && searchConfigured) {
-      runSearch(location, level);
+      runSearch(location, level, targetRole);
     }
-  }, [hydrated, profile, searchConfigured, location, level]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hydrated, profile, searchConfigured, location, level, targetRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Filter handlers ───────────────────────────────────────────────────────
   const applyLocation = () => {
     const loc = locationInput.trim();
     setLocation(loc);
     if (searchConfigured) {
-      runSearch(loc, level);
+      runSearch(loc, level, targetRole);
     }
   };
 
   const applyLevel = (lvl: string) => {
     setLevel(lvl);
     if (searchConfigured) {
-      runSearch(location, lvl);
+      runSearch(location, lvl, targetRole);
     }
   };
 
@@ -271,8 +286,10 @@ export default function JobSearchPage() {
     }
 
     setLocation(loc);
+    const role = targetRoleInput.trim();
+    setTargetRole(role);
     setSearchConfigured(true);
-    runSearch(loc, level);
+    runSearch(loc, level, role);
   };
 
   // ── Job analysis ──────────────────────────────────────────────────────────
@@ -349,7 +366,7 @@ export default function JobSearchPage() {
           </p>
         </div>
         <button
-          onClick={() => runSearch(location, level)}
+          onClick={() => runSearch(location, level, targetRole)}
           disabled={loading || !searchConfigured}
           title="Refresh results"
           className="mt-1 p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 disabled:opacity-40 transition-all"
@@ -396,6 +413,36 @@ export default function JobSearchPage() {
             </label>
           </div>
 
+          <div className="border border-brand-500/20 bg-brand-500/5 rounded-lg p-4 space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">What kind of jobs are you targeting?</h2>
+              <p className="text-xs text-slate-400 mt-1">Leave this blank to let AI infer the best role from your resume.</p>
+            </div>
+            <input
+              type="text"
+              placeholder="e.g. Software Engineer"
+              value={targetRoleInput}
+              onChange={(e) => setTargetRoleInput(e.target.value)}
+              className="w-full rounded-lg bg-slate-900/60 border border-slate-700 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500/70"
+            />
+            <div className="flex flex-wrap gap-2">
+              {TARGET_ROLES.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setTargetRoleInput(role)}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                    targetRoleInput === role
+                      ? "bg-brand-500 border-brand-500 text-white"
+                      : "bg-slate-800/50 border-slate-700 text-slate-300 hover:border-brand-500/60"
+                  }`}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-slate-500">You can refine location and level after the first search.</p>
             <button
@@ -430,7 +477,7 @@ export default function JobSearchPage() {
             )}
             {location && (
               <button
-                onClick={() => { setLocationInput(""); setLocation(""); runSearch("", level); }}
+                onClick={() => { setLocationInput(""); setLocation(""); runSearch("", level, targetRole); }}
                 className="text-xs text-slate-500 hover:text-slate-300 shrink-0"
               >
                 ✕
@@ -477,7 +524,7 @@ export default function JobSearchPage() {
             ) : searchError ? (
               <div className="py-8 text-center space-y-3">
                 <p className="text-red-400 text-sm">{searchError}</p>
-                <button onClick={() => runSearch(location, level)} className="text-xs text-brand-400 hover:underline">
+                <button onClick={() => runSearch(location, level, targetRole)} className="text-xs text-brand-400 hover:underline">
                   Try again
                 </button>
               </div>
@@ -495,7 +542,7 @@ export default function JobSearchPage() {
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-100 line-clamp-2 text-sm">{job.title}</p>
+                        <p className="font-medium text-slate-100 line-clamp-2 text-sm">{job.listing_label || `${job.company} is hiring ${job.title}`}</p>
                         <p className="text-xs text-slate-400 mt-0.5 truncate">{job.company}</p>
                       </div>
                       {job.ai_match_score && (
