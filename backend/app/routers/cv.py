@@ -11,7 +11,7 @@ from PyPDF2 import PdfReader
 
 from app.cv_builder.customizer import customize_cv
 from app.nlp.matcher import score_match
-from app.llm import chat
+from app.llm import LLMConfigurationError, chat
 from app.routers.job_search import search_google_jobs
 from app.constants import VARIANT_LABELS, VARIANT_HINTS
 
@@ -35,6 +35,15 @@ class CustomizeRequest(BaseModel):
 class ScoreTextRequest(BaseModel):
     cv_text: str
     job_description: str
+
+
+class AtsAuditResult(BaseModel):
+    score: int
+    keyword_coverage: float
+    matched_keywords: list[str]
+    missing_keywords: list[str]
+    checks: list[dict[str, object]]
+    recommendations: list[str]
 
 class StrategyRequest(BaseModel):
     cv_text: str
@@ -69,6 +78,67 @@ def _normalize_text(text: str) -> str:
 def _truncate(text: str, limit: int = 2400) -> str:
     cleaned = _normalize_text(text)
     return cleaned[:limit]
+
+
+def _audit_keywords(job_description: str, cv_text: str) -> tuple[list[str], list[str]]:
+    stop_words = {
+        "about", "after", "against", "among", "and", "are", "been", "being",
+        " from", "have", "into", "more", "must", " with", "that", "their",
+        "this", "will", "work", "your", "years", "using", "role", "team",
+        "required", "responsibilities", "experience", "skills", "ability",
+    }
+    jd_terms = re.findall(r"\b[a-zA-Z][a-zA-Z0-9+#./-]{2,}\b", job_description.lower())
+    cv_lower = cv_text.lower()
+    terms = []
+    seen = set()
+    for term in jd_terms:
+        normalized = term.strip(".,;:/-")
+        if normalized in stop_words or normalized in seen or len(normalized) < 3:
+            continue
+        seen.add(normalized)
+        terms.append(normalized)
+
+    matched = [term for term in terms if term in cv_lower]
+    missing = [term for term in terms if term not in cv_lower]
+    return matched[:40], missing[:40]
+
+
+def _run_ats_audit(cv_text: str, job_description: str) -> AtsAuditResult:
+    normalized_cv = _normalize_text(cv_text)
+    words = re.findall(r"\b\w+\b", normalized_cv)
+    lower_cv = normalized_cv.lower()
+    matched, missing = _audit_keywords(job_description, normalized_cv)
+    keyword_total = len(matched) + len(missing)
+    keyword_coverage = round(len(matched) / max(keyword_total, 1), 3)
+
+    checks = [
+        {"id": "keywords", "label": "Job keywords", "passed": keyword_coverage >= 0.55, "detail": f"{len(matched)} of {keyword_total} important terms found"},
+        {"id": "length", "label": "Readable length", "passed": 250 <= len(words) <= 1200, "detail": f"{len(words)} words detected"},
+        {"id": "sections", "label": "Standard sections", "passed": sum(section in lower_cv for section in ("experience", "education", "skills")) >= 2, "detail": "Experience, education, and skills headings are ATS-friendly"},
+        {"id": "contact", "label": "Contact details", "passed": bool(re.search(r"[\w.+-]+@[\w.-]+\.\w{2,}|(?:\+?\d[\d ()-]{7,}\d)", normalized_cv)), "detail": "Email or phone number detected"},
+        {"id": "achievements", "label": "Evidence of impact", "passed": bool(re.search(r"\b\d+(?:%|\+|\s*(?:users|clients|projects|years|million|k))\b", lower_cv)), "detail": "At least one measurable result detected"},
+    ]
+    score = round(sum(20 if check["passed"] else 0 for check in checks) + keyword_coverage * 20)
+    recommendations = []
+    if missing:
+        recommendations.append(f"Add truthful evidence for these job terms: {', '.join(missing[:8])}.")
+    if not checks[1]["passed"]:
+        recommendations.append("Aim for a focused resume between 250 and 1,200 words.")
+    if not checks[2]["passed"]:
+        recommendations.append("Use clear Experience, Education, and Skills section headings.")
+    if not checks[3]["passed"]:
+        recommendations.append("Add a professional email address and phone number.")
+    if not checks[4]["passed"]:
+        recommendations.append("Strengthen bullets with measurable outcomes where available.")
+
+    return AtsAuditResult(
+        score=min(score, 100),
+        keyword_coverage=keyword_coverage,
+        matched_keywords=matched,
+        missing_keywords=missing,
+        checks=checks,
+        recommendations=recommendations,
+    )
 
 
 def _insight_to_text(value: object) -> str:
@@ -134,6 +204,15 @@ async def score_from_text(req: ScoreTextRequest):
     if not req.job_description.strip():
         raise HTTPException(status_code=400, detail="Job description cannot be empty")
     return score_match(req.cv_text, req.job_description)
+
+
+@router.post("/ats-audit", response_model=AtsAuditResult)
+async def ats_audit(req: ScoreTextRequest):
+    if not req.cv_text.strip():
+        raise HTTPException(status_code=400, detail="CV text cannot be empty")
+    if not req.job_description.strip():
+        raise HTTPException(status_code=400, detail="Job description cannot be empty")
+    return _run_ats_audit(req.cv_text, req.job_description)
 
 @router.post("/extract-insights")
 async def extract_insights(req: ScoreTextRequest):
@@ -393,6 +472,9 @@ Return the JSON object with comprehensive extracted information."""
         except json.JSONDecodeError as e:
             print(f"[ERROR] JSON parsing failed: {str(e)}")
             yield await send_progress("error", f"Failed to parse AI response: {str(e)}", 0)
+        except LLMConfigurationError as e:
+            print(f"[ERROR] LLM configuration error: {e}")
+            yield await send_progress("error", str(e), 0)
         except Exception as e:
             print(f"[ERROR] Unexpected error: {str(e)}")
             import traceback

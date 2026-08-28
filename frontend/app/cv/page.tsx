@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Download, Sparkles, FileText } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Sparkles, FileText } from "lucide-react";
 import axios from "axios";
 import { useCvProfile } from "@/components/CvProvider";
 
@@ -13,6 +13,8 @@ export default function CVBuilderPage() {
   const variant = "data_science";
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [atsAudit, setAtsAudit] = useState<any>(null);
+  const [atsLoading, setAtsLoading] = useState(false);
 
   const customize = async () => {
     if (!profile?.text) {
@@ -36,6 +38,21 @@ export default function CVBuilderPage() {
     a.href = URL.createObjectURL(blob);
     a.download = `CV_${variant}_tailored.txt`;
     a.click();
+  };
+
+  const runAtsAudit = async () => {
+    if (!profile?.text || !jd.trim()) return;
+
+    setAtsLoading(true);
+    setResult(null);
+    try {
+      const r = await axios.post(`${API}/cv/ats-audit`, { cv_text: profile.text, job_description: jd });
+      setAtsAudit(r.data);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setAtsLoading(false);
+    }
   };
 
   if (hydrated && !profile?.text) {
@@ -84,6 +101,14 @@ export default function CVBuilderPage() {
             <Sparkles size={18} />
             {loading ? "Customizing with AI..." : "Customize CV"}
           </button>
+          <button
+            onClick={runAtsAudit}
+            disabled={atsLoading || !jd.trim() || !profile?.text}
+            className="w-full border border-slate-600 hover:border-brand-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-200 rounded-lg px-6 py-3 font-semibold transition-colors flex items-center justify-center gap-2"
+          >
+            <CheckCircle2 size={18} />
+            {atsLoading ? "Auditing resume..." : "Run ATS audit"}
+          </button>
         </div>
 
         {/* Results Section */}
@@ -127,6 +152,45 @@ export default function CVBuilderPage() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-2">{result.match.confidence_label}</p>
+                </div>
+              )}
+            </div>
+          ) : atsAudit ? (
+            <div className="space-y-5">
+              <div className="flex items-end justify-between">
+                <div>
+                  <p className="text-sm text-slate-400">ATS readiness</p>
+                  <p className="text-4xl font-bold text-brand-400">{atsAudit.score}%</p>
+                </div>
+                <span className="text-sm text-slate-400">{Math.round(atsAudit.keyword_coverage * 100)}% keyword coverage</span>
+              </div>
+              <div className="space-y-2">
+                {atsAudit.checks.map((check: any) => (
+                  <div key={check.id} className="flex items-start gap-3 rounded-lg border border-slate-700 bg-slate-900/40 p-3">
+                    {check.passed ? <CheckCircle2 className="text-emerald-400 mt-0.5" size={18} /> : <AlertCircle className="text-amber-400 mt-0.5" size={18} />}
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{check.label}</p>
+                      <p className="text-xs text-slate-400">{check.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {atsAudit.missing_keywords.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-slate-200">Missing job terms</p>
+                  <div className="flex flex-wrap gap-2">
+                    {atsAudit.missing_keywords.slice(0, 16).map((keyword: string) => (
+                      <span key={keyword} className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-200">{keyword}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {atsAudit.recommendations.length > 0 && (
+                <div className="border-t border-slate-700 pt-4">
+                  <p className="mb-2 text-sm font-semibold text-slate-200">Next improvements</p>
+                  <ul className="space-y-2 text-sm text-slate-400">
+                    {atsAudit.recommendations.map((recommendation: string) => <li key={recommendation}>• {recommendation}</li>)}
+                  </ul>
                 </div>
               )}
             </div>

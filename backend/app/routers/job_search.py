@@ -3,7 +3,7 @@ from pydantic import BaseModel
 import httpx
 import json
 from typing import Optional
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from app.config import settings
 from app.llm import chat
 from bs4 import BeautifulSoup
@@ -157,7 +157,29 @@ async def search_google_jobs(query: str, location: str, num_results: int = 20) -
         raise HTTPException(status_code=500, detail=f"Job search failed: {str(e)}")
 
 def is_valid_job_posting(title: str, snippet: str, url: str, location: str = "") -> bool:
-    """Keep every result unless it has no evidence of the requested location."""
+    """Accept results with job intent while rejecting profiles, articles, and forums."""
+    parsed_url = urlparse(url)
+    hostname = parsed_url.netloc.lower().removeprefix("www.")
+    path = parsed_url.path.lower()
+    searchable_text = unquote(f"{title} {snippet} {url}").lower()
+
+    blocked_domains = {"reddit.com", "facebook.com", "x.com", "medium.com"}
+    blocked_path_terms = ("/in/", "/posts/", "/article", "/news/", "/questions/", "/profile")
+    is_linkedin_job = hostname == "linkedin.com" and path.startswith("/jobs/")
+    if (hostname in blocked_domains and not is_linkedin_job) or (any(term in path for term in blocked_path_terms) and not is_linkedin_job):
+        return False
+
+    job_signals = (
+        " is hiring", " is looking for", "job", "jobs", "career", "careers",
+        "opening", "vacancy", "apply now", "internship", "engineer", "developer",
+        "analyst", "scientist", "manager", "researcher", "designer",
+    )
+    non_job_signals = ("research paper", "journal article", "reddit", "profile", "university course")
+    if not any(signal in searchable_text for signal in job_signals):
+        return False
+    if any(signal in searchable_text for signal in non_job_signals) and not any(signal in searchable_text for signal in ("apply", "hiring", "vacancy")):
+        return False
+
     requested_location = location.strip().lower()
     if not requested_location or requested_location in {"worldwide", "anywhere", "remote or worldwide"}:
         return True
@@ -171,7 +193,6 @@ def is_valid_job_posting(title: str, snippet: str, url: str, location: str = "")
         "united states": ["united states", "usa", "us"],
     }
     aliases = location_aliases.get(requested_location, [requested_location])
-    searchable_text = unquote(f"{title} {snippet} {url}").lower()
     return any(alias in searchable_text for alias in aliases)
 
 def clean_job_title(title: str) -> str:
@@ -201,33 +222,24 @@ def clean_job_title(title: str) -> str:
 
 def extract_company(title: str, url: str = "") -> str:
     """Extract company name from job title and URL"""
-    # Try to extract from URL first (more reliable)
-    if url:
-        # Extract domain
-        from urllib.parse import urlparse
-        domain = urlparse(url).netloc
-        
-        # Remove www and common suffixes
-        domain = domain.replace("www.", "").split(".")[0]
-        
-        # Capitalize
-        if domain and domain not in ["linkedin", "indeed", "glassdoor", "careers", "jobs"]:
-            return domain.capitalize()
-    
-    # Fallback: extract from title
-    # Look for company name before common separators
+    cleaned_title = clean_job_title(title)
+    hiring_match = re.match(r"(.+?)\s+is hiring\s+(.+)$", cleaned_title, flags=re.IGNORECASE)
+    if hiring_match:
+        return hiring_match.group(1).strip()
+
     separators = [" - ", " | ", " at ", " for "]
-    for sep in separators:
-        if sep in title:
-            parts = title.split(sep)
-            # Company is usually after the job title
-            if len(parts) > 1:
-                potential_company = parts[-1].strip()
-                # Remove common suffixes
-                for suffix in [" - LinkedIn", " | LinkedIn", " - Indeed", " | Indeed", " Jobs", " Careers"]:
-                    potential_company = potential_company.replace(suffix, "").strip()
-                if potential_company and len(potential_company) < 50:
-                    return potential_company
+    for separator in separators:
+        if separator in cleaned_title:
+            potential_company = cleaned_title.split(separator)[-1].strip()
+            if potential_company and len(potential_company) < 50:
+                return potential_company
+
+    hostname = urlparse(url).netloc.lower().removeprefix("www.")
+    provider_domains = {"linkedin.com", "indeed.com", "glassdoor.com", "reddit.com"}
+    if hostname and hostname not in provider_domains:
+        company = hostname.split(".")[0].replace("-", " ").title()
+        if company not in {"Careers", "Jobs"}:
+            return company
     
     return "Unknown"
 
