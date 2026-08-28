@@ -31,6 +31,20 @@ def _select_best_variant(target_role: str, cv_text: str) -> dict[str, Any]:
     }
 
 
+def _source_item_to_text(item: Any) -> str:
+    """Normalize tool payload items before inserting them into a prompt."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, dict):
+        title = str(item.get("title", "")).strip()
+        company = str(item.get("company", "")).strip()
+        url = str(item.get("url", "")).strip()
+        snippet = str(item.get("snippet", item.get("description", ""))).strip()
+        parts = [part for part in (title, company, url, snippet) if part]
+        return " | ".join(parts) if parts else json.dumps(item, ensure_ascii=True)
+    return str(item)
+
+
 async def _fetch_job_data(
     target_role: str, location: str, seniority: str, num_results: int = 5
 ) -> dict[str, Any]:
@@ -81,8 +95,12 @@ async def _synthesize_strategy_analysis(
     # Parse job sources
     try:
         job_data = json.loads(job_sources_json)
-        job_source_blocks = job_data.get("job_sources", [])
-        job_requirement_lines = job_data.get("job_requirements", [])
+        job_source_blocks = [
+            _source_item_to_text(item) for item in job_data.get("job_sources", [])
+        ]
+        job_requirement_lines = [
+            _source_item_to_text(item) for item in job_data.get("job_requirements", [])
+        ]
     except Exception:
         job_source_blocks = ["No job snippets were retrieved."]
         job_requirement_lines = []
