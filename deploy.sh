@@ -138,7 +138,7 @@ sleep 5
 CONTAINERS=("embeddify-postgres" "embeddify-redis" "embeddify-backend" "embeddify-frontend")
 
 for container in "${CONTAINERS[@]}"; do
-  max_retries=12  # ~60 seconds total
+  max_retries=30  # ~150 seconds total (backend can be slow to load PyTorch)
   count=0
   while [ $count -lt $max_retries ]; do
     status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
@@ -151,6 +151,8 @@ for container in "${CONTAINERS[@]}"; do
 
     if [ "$status" != "running" ]; then
       log_warn "${container} — ${status} (waiting...)"
+    elif [ "$health" != "healthy" ] && [ "$health" != "running" ]; then
+      log_warn "${container} — running but health is '${health}' (waiting...)"
     fi
 
     sleep 5
