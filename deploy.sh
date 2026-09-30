@@ -8,12 +8,14 @@
 #   ./deploy.sh --fast           # only restart containers, no rebuild
 #   ./deploy.sh --build-backend  # rebuild only backend
 #   ./deploy.sh --build-frontend # rebuild only frontend
+#   ./deploy.sh --no-caddy       # skip Caddy restart (preserve SSL certs)
 #
 # What this does:
 #   1. Optionally pulls latest code from git
 #   2. Builds fresh Docker images (or skips with --fast)
 #   3. Restarts all containers via docker compose
 #   4. Waits for health checks then reports status
+#   5. Optionally restarts Caddy (skipped with --no-caddy)
 # =============================================================================
 set -euo pipefail
 
@@ -36,6 +38,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # ── Parse arguments ─────────────────────────────────────────────────────────
 DO_PULL=true
 DO_BUILD=true
+DO_CADDY=true
 BUILD_BACKEND=false
 BUILD_FRONTEND=false
 
@@ -45,8 +48,9 @@ for arg in "$@"; do
     --fast)            DO_BUILD=false      ;;
     --build-backend)   BUILD_BACKEND=true; DO_BUILD=false ;;
     --build-frontend)  BUILD_FRONTEND=true; DO_BUILD=false ;;
+    --no-caddy|--skip-caddy) DO_CADDY=false ;;
     --help|-h)
-      echo "Usage: $0 [--no-pull] [--fast] [--build-backend] [--build-frontend]"
+      echo "Usage: $0 [--no-pull] [--fast] [--build-backend] [--build-frontend] [--no-caddy]"
       exit 0
       ;;
   esac
@@ -160,11 +164,16 @@ for container in "${CONTAINERS[@]}"; do
 done
 
 # ── 6. Restart Caddy (to pick up Caddyfile changes) ────────────────────────
-# If using Caddy as a separate container
-if docker ps --format '{{.Names}}' | grep -q 'embeddify-caddy'; then
-  log_info "Restarting Caddy to pick up config changes..."
-  docker restart embeddify-caddy
-  log_ok "Caddy restarted."
+# NOTE: Skipping Caddy restart preserves existing SSL certificates.
+# Use --no-caddy in CI to avoid SSL renewal on every deploy.
+if [ "$DO_CADDY" = true ]; then
+  if docker ps --format '{{.Names}}' | grep -q 'embeddify-caddy'; then
+    log_info "Restarting Caddy to pick up config changes..."
+    docker restart embeddify-caddy
+    log_ok "Caddy restarted."
+  fi
+else
+  log_info "Skipping Caddy restart (--no-caddy). SSL certificates preserved."
 fi
 
 # ── 7. Summary ─────────────────────────────────────────────────────────────
