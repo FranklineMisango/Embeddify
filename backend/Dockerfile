@@ -9,7 +9,7 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies for psycopg2, Playwright browsers, and PyTorch
+# Install system dependencies for psycopg2 and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
@@ -28,9 +28,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
         torchvision==0.18.1 \
         --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
-    # Install Playwright browsers (needed for LinkedIn scraper)
-    playwright install chromium && \
-    playwright install-deps chromium
+    # Install Playwright browser binary (system deps are provided via apt packages above)
+    playwright install chromium
 
 # Copy the rest of the application
 COPY . .
