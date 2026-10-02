@@ -101,9 +101,11 @@ services:
     image: caddy:2-alpine
     container_name: embeddify-caddy
     restart: unless-stopped
+    environment:
+      - CADDY_ADMIN_PORT=2019
     ports:
-      - "80:80"
-      - "443:443"
+    - "8080:80"
+    - "8443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
