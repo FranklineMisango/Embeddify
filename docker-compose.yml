@@ -75,6 +75,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - default
+      - proxy
 
   # ── Frontend (Next.js) ────────────────────────────────────────────────────
   frontend:
@@ -95,27 +98,16 @@ services:
       start_period: 30s
     depends_on:
       - backend
-
-  # ── Caddy (TLS reverse proxy) ───────────────────────────────────────────
-  # Start this service on a fresh host only. Its named volumes preserve ACME
-  # certificates and Caddy state across application updates.
-  caddy:
-    build:
-      context: .
-      dockerfile: caddy/Dockerfile
-    container_name: embeddify-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-      - frontend
+    networks:
+      - default
+      - proxy
 
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
+
+networks:
+  default:
+    name: embeddify_default
+  proxy:
+    name: caddy-central_proxy
+    external: true

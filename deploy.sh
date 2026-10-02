@@ -127,6 +127,11 @@ if ! command -v docker &>/dev/null; then
   exit 1
 fi
 
+if ! docker network inspect caddy-central_proxy >/dev/null 2>&1; then
+  log_error "Central Caddy network is missing. Start caddy-central before deploying Embeddify."
+  exit 1
+fi
+
 echo ""
 echo "============================================"
 echo "  🚀  Embeddify — Deploy Script"
@@ -146,17 +151,7 @@ else
   log_info "Skipping git pull (--no-pull)."
 fi
 
-# ── 2. Copy the latest Caddyfile into context (in case docker-compose needs it) ──
-log_info "Ensuring Caddyfile is up-to-date..."
-# Caddyfile is mounted/baked, so we just confirm it exists
-if [ -f "${ROOT_DIR}/Caddyfile" ]; then
-  log_ok "Caddyfile found."
-else
-  log_error "Caddyfile not found at ${ROOT_DIR}/Caddyfile!"
-  exit 1
-fi
-
-# ── 3. Build images (selective) ────────────────────────────────────────────
+# ── 2. Build images (selective) ────────────────────────────────────────────
 if [ "$BUILD_BACKEND" = true ]; then
   log_info "Rebuilding backend image..."
   ${COMPOSE_CMD} build --no-cache backend
@@ -189,23 +184,12 @@ else
   log_info "Skipping build (--fast)."
 fi
 
-# ── 4. Start application services ─────────────────────────────────────────
+# ── 3. Start application services ─────────────────────────────────────────
 log_info "Starting application services..."
 ${COMPOSE_CMD} up -d postgres redis backend frontend
 log_ok "Application services started."
 
-# Caddy is intentionally excluded from routine updates. Its ACME state lives
-# in named volumes, and leaving the container running avoids unnecessary TLS
-# checks or certificate requests during application deployments.
-if [ "$FRESH_DEPLOY" = true ]; then
-  log_info "Starting Caddy for fresh TLS provisioning..."
-  ${COMPOSE_CMD} up -d caddy
-  log_ok "Caddy started; certificates will be provisioned if needed."
-else
-  log_info "Leaving Caddy unchanged. Use --fresh only on a new host."
-fi
-
-# ── 5. Wait for health checks & report status ─────────────────────────────
+# ── 4. Wait for health checks & report status ──────────────────────────────
 echo ""
 log_info "Waiting for services to become healthy..."
 sleep 5
@@ -241,7 +225,7 @@ for container in "${CONTAINERS[@]}"; do
   fi
 done
 
-# ── 6. Summary ──────────────────────────────────────────────────────────────
+# ── 5. Summary ──────────────────────────────────────────────────────────────
 echo ""
 echo "============================================"
 echo "  ✅  Deploy Complete!"
@@ -250,7 +234,7 @@ echo ""
 echo "  Frontend  → http://localhost:3000"
 echo "  Backend   → http://localhost:8000"
 echo "  Docs      → http://localhost:8000/docs"
-echo "  Live URL  → https://embeddify.misango.me"
+echo "  Live URL  → https://embeddify.misango.me (via caddy-central)"
 echo ""
 echo "  Quick commands:"
 echo "    ./run-all.sh logs       → tail logs"
