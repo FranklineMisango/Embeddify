@@ -8,7 +8,7 @@
 #   ./deploy.sh --fast                   # only restart containers, no rebuild
 #   ./deploy.sh --build-backend          # rebuild only backend
 #   ./deploy.sh --build-frontend         # rebuild only frontend
-#   ./deploy.sh --no-caddy               # skip Caddy restart (preserve SSL certs)
+#   ./deploy.sh --fresh                  # start Caddy and provision TLS on a new host
 #
 #   # ── EC2 remote deployment ──────────────────────────────────────────────
 #   ./deploy.sh --ec2 HOST               # deploy to EC2 (SSH)
@@ -28,7 +28,7 @@
 #   2. Builds fresh Docker images (or skips with --fast)
 #   3. Restarts all containers via docker compose
 #   4. Waits for health checks then reports status
-#   5. Optionally restarts Caddy (skipped with --no-caddy)
+#   5. Starts Caddy only for a fresh deployment; routine updates leave it running
 # =============================================================================
 set -euo pipefail
 
@@ -51,7 +51,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # ── Parse arguments ─────────────────────────────────────────────────────────
 DO_PULL=true
 DO_BUILD=true
-DO_CADDY=true
+FRESH_DEPLOY=false
 BUILD_BACKEND=false
 BUILD_FRONTEND=false
 EC2_HOST=""
@@ -66,13 +66,13 @@ while [[ $# -gt 0 ]]; do
     --fast)                 DO_BUILD=false;       REMAINING_ARGS+=("$1"); shift ;;
     --build-backend)        BUILD_BACKEND=true; DO_BUILD=false; REMAINING_ARGS+=("$1"); shift ;;
     --build-frontend)       BUILD_FRONTEND=true; DO_BUILD=false; REMAINING_ARGS+=("$1"); shift ;;
-    --no-caddy|--skip-caddy) DO_CADDY=false;      REMAINING_ARGS+=("$1"); shift ;;
+    --fresh)                FRESH_DEPLOY=true;  REMAINING_ARGS+=("$1"); shift ;;
     --ec2)                  EC2_HOST="$2"; shift 2 ;;
     --ec2-user)             EC2_USER="$2";  shift 2 ;;
     --ec2-key)              EC2_SSH_KEY="$2"; shift 2 ;;
     --ec2-dir)              EC2_DIR="$2";   shift 2 ;;
     --help|-h)
-      echo "Usage: $0 [--no-pull] [--fast] [--build-backend] [--build-frontend] [--no-caddy]"
+      echo "Usage: $0 [--no-pull] [--fast] [--build-backend] [--build-frontend] [--fresh]"
       echo "       $0 --ec2 HOST [--ec2-user USER] [--ec2-key PATH] [--ec2-dir DIR] [options]"
       exit 0
       ;;
@@ -189,10 +189,21 @@ else
   log_info "Skipping build (--fast)."
 fi
 
-# ── 4. Start everything ────────────────────────────────────────────────────
-log_info "Starting all services..."
-${COMPOSE_CMD} up -d
-log_ok "All services started."
+# ── 4. Start application services ─────────────────────────────────────────
+log_info "Starting application services..."
+${COMPOSE_CMD} up -d postgres redis backend frontend
+log_ok "Application services started."
+
+# Caddy is intentionally excluded from routine updates. Its ACME state lives
+# in named volumes, and leaving the container running avoids unnecessary TLS
+# checks or certificate requests during application deployments.
+if [ "$FRESH_DEPLOY" = true ]; then
+  log_info "Starting Caddy for fresh TLS provisioning..."
+  ${COMPOSE_CMD} up -d caddy
+  log_ok "Caddy started; certificates will be provisioned if needed."
+else
+  log_info "Leaving Caddy unchanged. Use --fresh only on a new host."
+fi
 
 # ── 5. Wait for health checks & report status ─────────────────────────────
 echo ""
@@ -230,20 +241,7 @@ for container in "${CONTAINERS[@]}"; do
   fi
 done
 
-# ── 6. Restart Caddy (to pick up Caddyfile changes) ────────────────────────
-# NOTE: Skipping Caddy restart preserves existing SSL certificates.
-# Use --no-caddy in CI to avoid SSL renewal on every deploy.
-if [ "$DO_CADDY" = true ]; then
-  if docker ps --format '{{.Names}}' | grep -q 'embeddify-caddy'; then
-    log_info "Restarting Caddy to pick up config changes..."
-    docker restart embeddify-caddy
-    log_ok "Caddy restarted."
-  fi
-else
-  log_info "Skipping Caddy restart (--no-caddy). SSL certificates preserved."
-fi
-
-# ── 7. Summary ─────────────────────────────────────────────────────────────
+# ── 6. Summary ──────────────────────────────────────────────────────────────
 echo ""
 echo "============================================"
 echo "  ✅  Deploy Complete!"
