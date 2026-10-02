@@ -1,14 +1,27 @@
-#!/usr/bin/env bash
+\#!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — One-command deploy for Embeddify (EC2 / Docker)
+# deploy.sh — One-command deploy for Embeddify (Local or EC2 / Docker)
 #
 # Usage:
-#   ./deploy.sh                  # pull latest, rebuild, restart
-#   ./deploy.sh --no-pull        # skip git pull
-#   ./deploy.sh --fast           # only restart containers, no rebuild
-#   ./deploy.sh --build-backend  # rebuild only backend
-#   ./deploy.sh --build-frontend # rebuild only frontend
-#   ./deploy.sh --no-caddy       # skip Caddy restart (preserve SSL certs)
+#   ./deploy.sh                          # pull latest, rebuild, restart (local)
+#   ./deploy.sh --no-pull                # skip git pull
+#   ./deploy.sh --fast                   # only restart containers, no rebuild
+#   ./deploy.sh --build-backend          # rebuild only backend
+#   ./deploy.sh --build-frontend         # rebuild only frontend
+#   ./deploy.sh --no-caddy               # skip Caddy restart (preserve SSL certs)
+#
+#   # ── EC2 remote deployment ──────────────────────────────────────────────
+#   ./deploy.sh --ec2 HOST               # deploy to EC2 (SSH)
+#   ./deploy.sh --ec2 HOST --fast        # fast restart on EC2
+#   ./deploy.sh --ec2 HOST --no-pull     # skip pull on EC2
+#
+#   SSH credentials are resolved in order:
+#     1. --ec2-user USER / --ec2-key PATH  (CLI flags)
+#     2. EC2_USER / EC2_SSH_KEY env vars
+#     3. Defaults: ubuntu / ~/.ssh/ec2-key.pem
+#
+#   App directory on EC2 defaults to ~/codechest/Embeddify.
+#   Override with --ec2-dir PATH or EC2_DIR env var.
 #
 # What this does:
 #   1. Optionally pulls latest code from git
@@ -41,20 +54,72 @@ DO_BUILD=true
 DO_CADDY=true
 BUILD_BACKEND=false
 BUILD_FRONTEND=false
+EC2_HOST=""
+EC2_USER="${EC2_USER:-ubuntu}"
+EC2_SSH_KEY="${EC2_SSH_KEY:-${HOME}/.ssh/ec2-key.pem}"
+EC2_DIR="${EC2_DIR:-codechest/Embeddify}"
+REMAINING_ARGS=()
 
-for arg in "$@"; do
-  case "${arg}" in
-    --no-pull)         DO_PULL=false       ;;
-    --fast)            DO_BUILD=false      ;;
-    --build-backend)   BUILD_BACKEND=true; DO_BUILD=false ;;
-    --build-frontend)  BUILD_FRONTEND=true; DO_BUILD=false ;;
-    --no-caddy|--skip-caddy) DO_CADDY=false ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-pull)              DO_PULL=false;        REMAINING_ARGS+=("$1"); shift ;;
+    --fast)                 DO_BUILD=false;       REMAINING_ARGS+=("$1"); shift ;;
+    --build-backend)        BUILD_BACKEND=true; DO_BUILD=false; REMAINING_ARGS+=("$1"); shift ;;
+    --build-frontend)       BUILD_FRONTEND=true; DO_BUILD=false; REMAINING_ARGS+=("$1"); shift ;;
+    --no-caddy|--skip-caddy) DO_CADDY=false;      REMAINING_ARGS+=("$1"); shift ;;
+    --ec2)                  EC2_HOST="$2"; shift 2 ;;
+    --ec2-user)             EC2_USER="$2";  shift 2 ;;
+    --ec2-key)              EC2_SSH_KEY="$2"; shift 2 ;;
+    --ec2-dir)              EC2_DIR="$2";   shift 2 ;;
     --help|-h)
       echo "Usage: $0 [--no-pull] [--fast] [--build-backend] [--build-frontend] [--no-caddy]"
+      echo "       $0 --ec2 HOST [--ec2-user USER] [--ec2-key PATH] [--ec2-dir DIR] [options]"
       exit 0
       ;;
+    *)                      REMAINING_ARGS+=("$1"); shift ;;
   esac
 done
+
+# ── If --ec2 was given, forward the deploy to the EC2 host via SSH ──────────
+if [ -n "$EC2_HOST" ]; then
+  echo ""
+  echo "============================================"
+  echo "  🚀  Embeddify — Remote Deploy to EC2"
+  echo "  Host: ${EC2_HOST}"
+  echo "  User: ${EC2_USER}"
+  echo "  Key:  ${EC2_SSH_KEY}"
+  echo "  Dir:  ${EC2_DIR}"
+  echo "============================================"
+  echo ""
+
+  # Validate SSH key exists
+  if [ ! -f "$EC2_SSH_KEY" ]; then
+    log_error "SSH key not found: ${EC2_SSH_KEY}"
+    log_info "Provide one via --ec2-key PATH or EC2_SSH_KEY env var."
+    exit 1
+  fi
+
+  # Build the remote command — re-invoke deploy.sh on the EC2 host
+  REMOTE_CMD="cd \"${EC2_DIR}\" && ./deploy.sh ${REMAINING_ARGS[*]}"
+
+  log_info "Connecting to ${EC2_HOST} via SSH..."
+
+  # shellcheck disable=SC2029
+  ssh -i "$EC2_SSH_KEY" \
+      -o StrictHostKeyChecking=accept-new \
+      -o ConnectTimeout=10 \
+      -t \
+      "${EC2_USER}@${EC2_HOST}" \
+      "set -e; ${REMOTE_CMD}"
+
+  SSH_EXIT=$?
+  if [ $SSH_EXIT -eq 0 ]; then
+    log_ok "Remote deploy completed successfully."
+  else
+    log_error "Remote deploy failed (exit code ${SSH_EXIT})."
+  fi
+  exit $SSH_EXIT
+fi
 
 # ── Ensure docker is available ──────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
@@ -196,4 +261,3 @@ echo "    ./run-all.sh stop       → stop all"
 echo "    docker compose -f ${COMPOSE_FILE} ps → container status"
 echo ""
 echo "============================================"
-
