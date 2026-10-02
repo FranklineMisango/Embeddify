@@ -96,25 +96,5 @@ services:
     depends_on:
       - backend
 
-  # ── Reverse Proxy (Caddy) ─────────────────────────────────────────────────
-  caddy:
-    image: caddy:2-alpine
-    container_name: embeddify-caddy
-    restart: unless-stopped
-    environment:
-      - CADDY_ADMIN_PORT=2019
-    ports:
-    - "8080:80"
-    - "8443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - backend
-      - frontend
-
 volumes:
   pgdata:
-  caddy_data:
-  caddy_config:
