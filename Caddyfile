@@ -16,3 +16,9 @@ embeddify.misango.me {
     # ── Everything else → Next.js frontend (port 3000) ───────────────────
     reverse_proxy embeddify-frontend:3000
 }
+
+
+feenqr.misango.me {
+      encode gzip
+      reverse_proxy feenqr-web:8080
+}
