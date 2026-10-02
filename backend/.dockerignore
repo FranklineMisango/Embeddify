@@ -1,7 +1,33 @@
+# ── Python ────────────────────────────────────────────────────────────────
+.git
 __pycache__
 *.pyc
-.env
-.git
-.gitignore
+*.pyo
+.pytest_cache
+.venv
+venv
+env
+*.egg-info
+dist
+build
 *.md
+
+# ── Environment ──────────────────────────────────────────────────────────
+.env
+.env.*
+.env.local
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# ── Tests (not needed at runtime) ────────────────────────────────────────
+tests
+test_*
+
+# ── Logs / uploads ──────────────────────────────────────────────────────
+*.log
 uploads/*

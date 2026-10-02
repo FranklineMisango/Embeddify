@@ -5,9 +5,11 @@
 # =============================================================================
 FROM python:3.11-slim
 
-# Prevent Python from writing .pyc files and buffer stdout
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Prevent Python from writing .pyc files, buffer stdout, disable pip cache
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TMPDIR=/tmp
 
 # Install system dependencies for psycopg2 and runtime utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -25,11 +27,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
         torch==2.3.1 \
-        torchvision==0.18.1 \
         --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
     # Install Playwright browser binary (system deps are provided via apt packages above)
-    playwright install chromium
+    playwright install chromium && \
+    # Remove pip & tmp caches — they're not needed at runtime and save ~500MB-1GB
+    rm -rf /root/.cache /tmp/*
 
 # Copy the rest of the application
 COPY . .
