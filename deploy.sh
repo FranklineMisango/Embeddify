@@ -154,13 +154,13 @@ fi
 # ── 2. Build images (selective) ────────────────────────────────────────────
 if [ "$BUILD_BACKEND" = true ]; then
   log_info "Rebuilding backend image..."
-  ${COMPOSE_CMD} build --no-cache backend
+  ${COMPOSE_CMD} build backend
   log_ok "Backend image rebuilt."
 
 elif [ "$BUILD_FRONTEND" = true ]; then
   log_info "Rebuilding frontend image..."
   # Use DOCKER_BUILDKIT=1 for better progress reporting
-  DOCKER_BUILDKIT=1 docker build --no-cache \
+  DOCKER_BUILDKIT=1 docker build \
     -t embeddify-frontend:latest \
     -f "${ROOT_DIR}/frontend/Dockerfile" \
     "${ROOT_DIR}/frontend/"
@@ -171,14 +171,14 @@ elif [ "$DO_BUILD" = true ]; then
   # Frontend: build separately with explicit docker build to avoid timeout
   # on the "collecting build traces" phase (common with docker compose build)
   log_info "Building frontend (standalone build)..."
-  DOCKER_BUILDKIT=1 docker build --no-cache \
+  DOCKER_BUILDKIT=1 docker build \
     -t embeddify-frontend:latest \
     -f "${ROOT_DIR}/frontend/Dockerfile" \
     "${ROOT_DIR}/frontend/"
   log_ok "Frontend image built."
 
   log_info "Building backend..."
-  ${COMPOSE_CMD} build --no-cache backend
+  ${COMPOSE_CMD} build backend
   log_ok "Backend image built."
 else
   log_info "Skipping build (--fast)."
