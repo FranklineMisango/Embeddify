@@ -8,6 +8,7 @@ app = FastAPI(title="CV Job Matcher API")
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://18.142.144.144:3000",
 ]
 
 app.add_middleware(
